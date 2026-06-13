@@ -1,0 +1,14 @@
+{
+  "name": "aml-veritas-platform",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "build:dev": "npm run build:dev --prefix frontend",
+    "lint": "npm run lint --prefix frontend",
+    "preview": "npm run preview --prefix frontend",
+    "test": "npm run test --prefix frontend",
+    "test:watch": "npm run test:watch --prefix frontend",
+    "seed:admin": "npm run seed:admin --prefix backend"
+  }
+}

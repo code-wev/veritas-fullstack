@@ -1,0 +1,268 @@
+@import url('https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,100..900;1,100..900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Veritas AML Audit Design System
+   Brand: Veritas AML Power Platform
+   Primary green (#7AC142 / hsl 94 51% 51%) — calls to action, success
+   Brand navy  (#1A2D5E / hsl 223 57% 24%) — sidebar, dark surfaces
+   All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 210 15% 98%;
+    --foreground: 220 25% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 12%;
+
+    --primary: 223 55% 28%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 12% 92%;
+    --secondary-foreground: 220 25% 12%;
+
+    --muted: 210 12% 94%;
+    --muted-foreground: 210 10% 45%;
+
+    --accent: 223 30% 92%;
+    --accent-foreground: 223 55% 28%;
+
+    --destructive: 0 65% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 15% 88%;
+    --input: 210 15% 88%;
+    --ring: 223 55% 28%;
+
+    --radius: 0.375rem;
+
+    --sidebar-background: 223 50% 20%;
+    --sidebar-foreground: 210 20% 92%;
+    --sidebar-primary: 94 55% 55%;
+    --sidebar-primary-foreground: 223 50% 20%;
+    --sidebar-accent: 223 40% 28%;
+    --sidebar-accent-foreground: 94 50% 72%;
+    --sidebar-border: 223 40% 28%;
+    --sidebar-ring: 94 55% 55%;
+
+    /* Chart colors - navy primary, green as secondary accent */
+    --chart-1: 223 55% 28%;
+    --chart-2: 94 51% 51%;
+    --chart-3: 200 55% 45%;
+    --chart-4: 35 70% 50%;
+    --chart-5: 260 40% 50%;
+
+    /* Status colors */
+    --success: 94 51% 51%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 85% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 200 55% 45%;
+    --info-foreground: 0 0% 100%;
+  }
+
+  .dark {
+    --background: 220 25% 8%;
+    --foreground: 210 15% 95%;
+
+    --card: 220 22% 11%;
+    --card-foreground: 210 15% 95%;
+
+    --popover: 220 22% 11%;
+    --popover-foreground: 210 15% 95%;
+
+    --primary: 223 60% 62%;
+    --primary-foreground: 220 25% 8%;
+
+    --secondary: 220 18% 16%;
+    --secondary-foreground: 210 15% 95%;
+
+    --muted: 220 18% 16%;
+    --muted-foreground: 210 12% 60%;
+
+    --accent: 223 45% 22%;
+    --accent-foreground: 223 60% 78%;
+
+    --destructive: 0 55% 45%;
+    --destructive-foreground: 210 15% 95%;
+
+    --border: 220 18% 18%;
+    --input: 220 18% 18%;
+    --ring: 223 60% 62%;
+
+    --sidebar-background: 223 50% 10%;
+    --sidebar-foreground: 210 20% 92%;
+    --sidebar-primary: 94 55% 55%;
+    --sidebar-primary-foreground: 223 50% 10%;
+    --sidebar-accent: 223 40% 20%;
+    --sidebar-accent-foreground: 94 50% 72%;
+    --sidebar-border: 223 40% 18%;
+    --sidebar-ring: 94 55% 55%;
+
+    /* Chart colors - dark mode */
+    --chart-1: 223 60% 62%;
+    --chart-2: 94 55% 55%;
+    --chart-3: 200 55% 55%;
+    --chart-4: 35 70% 55%;
+    --chart-5: 260 45% 60%;
+
+    /* Status colors - dark mode */
+    --success: 94 55% 55%;
+    --success-foreground: 220 25% 8%;
+    --warning: 38 85% 55%;
+    --warning-foreground: 220 25% 8%;
+    --info: 200 55% 55%;
+    --info-foreground: 220 25% 8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "SF Mono", SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  }
+
+  p {
+    font-family: 'Jost', sans-serif;
+  }
+}
+
+/* ============================================================
+   Print styles — applied when the user prints any module page.
+   The PrintHeader (mounted in AppLayout) is hidden on screen
+   and shown only on print, with the rest of the app chrome
+   (sidebar, topnav) hidden.
+   ============================================================ */
+
+.print-header,
+.section-print-only { display: none; }
+
+@media print {
+  @page {
+    size: Letter portrait;
+    margin: 0.6in 0.6in 0.7in 0.6in;
+  }
+
+  /* Hide app chrome */
+  .no-print,
+  [data-sidebar],
+  nav[role="navigation"] { display: none !important; }
+
+  /* Reset layout for print */
+  html, body, #root {
+    background: hsl(var(--background)) !important;
+    color: hsl(var(--foreground)) !important;
+  }
+  .print-main {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  main { overflow: visible !important; }
+
+  /* Show & style print header */
+  .print-header {
+    display: block !important;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid hsl(var(--primary));
+    page-break-after: avoid;
+  }
+  .print-header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+  .print-header-brand {
+    font-size: 10pt;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: hsl(var(--muted-foreground));
+  }
+  .print-header-title {
+    font-size: 14pt;
+    font-weight: 700;
+    color: hsl(var(--foreground));
+  }
+  .print-header-meta {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+  }
+  .print-header-meta th,
+  .print-header-meta td {
+    text-align: left;
+    padding: 3px 8px 3px 0;
+    vertical-align: top;
+  }
+  .print-header-meta th {
+    width: 14%;
+    color: hsl(var(--muted-foreground));
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 8pt;
+    letter-spacing: 0.04em;
+  }
+  .print-header-meta td {
+    width: 36%;
+    color: hsl(var(--foreground));
+    font-weight: 500;
+  }
+
+  /* Repeat the print header on every printed page */
+  .print-header { position: running(printHeader); }
+  @page { @top-center { content: element(printHeader); } }
+
+  /* Avoid awkward breaks inside cards/tables */
+  .card, [class*="card"], table { page-break-inside: avoid; }
+  thead { display: table-header-group; }
+  tr, td, th { page-break-inside: avoid; }
+
+  body.printing-section .print-section-hide { display: none !important; }
+  body.printing-section .testing-tabs { display: none !important; }
+  body.printing-section .section-print-only { display: block !important; }
+  body.printing-section .print-section-active,
+  body.printing-section .print-section-active * {
+    visibility: visible !important;
+  }
+  body.printing-section .print-section-active {
+    display: block !important;
+    margin: 0 !important;
+  }
+  body.printing-section [data-state="inactive"].print-section-active {
+    display: none !important;
+  }
+  body.printing-section .h-\[calc\(100vh-300px\)\] {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  body.printing-section [data-panel],
+  body.printing-section [data-panel-group],
+  body.printing-section [data-radix-scroll-area-viewport] {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .reporting-results .page-block { page-break-inside: avoid; break-inside: avoid; }
+  .reporting-results .page-break-before { page-break-before: always; break-before: page; }
+  .reporting-results thead { display: table-header-group; }
+  .reporting-results tr.register-row { page-break-inside: avoid; break-inside: avoid; }
+}
+

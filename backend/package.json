@@ -1,0 +1,17 @@
+{
+  "name": "aml-veritas-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "supabase start",
+    "stop": "supabase stop",
+    "serve": "supabase functions serve",
+    "seed:admin": "node scripts/seed-admin.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.93.3"
+  },
+  "devDependencies": {
+    "supabase": "^1.215.0"
+  }
+}

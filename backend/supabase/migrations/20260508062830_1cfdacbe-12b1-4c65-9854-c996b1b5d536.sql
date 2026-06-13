@@ -1,0 +1,1 @@
+DELETE FROM public.reporting_samples WHERE report_type = 'lvctr';

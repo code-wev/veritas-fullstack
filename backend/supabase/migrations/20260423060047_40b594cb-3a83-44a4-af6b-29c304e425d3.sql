@@ -1,0 +1,1 @@
+ALTER TABLE public.tm_alert_samples ADD COLUMN IF NOT EXISTS reviewed_per_process boolean DEFAULT null;
