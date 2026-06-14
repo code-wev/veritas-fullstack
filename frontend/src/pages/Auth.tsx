@@ -227,7 +227,7 @@ export default function Auth() {
                     "https://www.figma.com/api/mcp/asset/f3d3f636-9ecc-481d-8db9-537207d4d41a"
                   }
                   alt="Veritas logo mark"
-                  className="h-[72px] w-auto"
+                  className="h-[72px] w-20"
                 />
               </Link>
               <div className="text-center space-y-2">
