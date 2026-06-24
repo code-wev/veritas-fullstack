@@ -37,12 +37,14 @@ function ProtectedRoute({
   children,
   withLayout = true,
   adminOnly = false,
+  nonAdminOnly = false,
   msbOnly = false,
   moduleKey,
 }: {
   children: React.ReactNode;
   withLayout?: boolean;
   adminOnly?: boolean;
+  nonAdminOnly?: boolean;
   msbOnly?: boolean;
   moduleKey?: string;
 }) {
@@ -87,6 +89,11 @@ function ProtectedRoute({
   // Block non-admins from admin routes
   if (adminOnly && !isAdmin) {
     return <Navigate to="/" replace />;
+  }
+
+  // Block admins from non-admin routes
+  if (nonAdminOnly && isAdmin) {
+    return <Navigate to="/admin/security" replace />;
   }
 
   // Block non-MSB clients from MSB-only routes (sidebar already hides the link;
@@ -166,7 +173,7 @@ function AppRoutes() {
       <Route
         path="/"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute nonAdminOnly>
             <FirmOverview />
           </ProtectedRoute>
         }
@@ -174,7 +181,7 @@ function AppRoutes() {
       <Route
         path="/clients"
         element={
-          <ProtectedRoute withLayout={false}>
+          <ProtectedRoute nonAdminOnly withLayout={false}>
             <ClientSelection />
           </ProtectedRoute>
         }
@@ -186,7 +193,7 @@ function AppRoutes() {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute nonAdminOnly>
             <Dashboard />
           </ProtectedRoute>
         }
@@ -194,7 +201,7 @@ function AppRoutes() {
       <Route
         path="/msb-registration"
         element={
-          <ProtectedRoute msbOnly moduleKey="msb_registration">
+          <ProtectedRoute nonAdminOnly msbOnly moduleKey="msb_registration">
             <MSBRegistration />
           </ProtectedRoute>
         }
@@ -202,7 +209,7 @@ function AppRoutes() {
       <Route
         path="/governance"
         element={
-          <ProtectedRoute moduleKey="governance">
+          <ProtectedRoute nonAdminOnly moduleKey="governance">
             <Governance />
           </ProtectedRoute>
         }
@@ -210,7 +217,7 @@ function AppRoutes() {
       <Route
         path="/aml-program"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute nonAdminOnly>
             <AMLProgram />
           </ProtectedRoute>
         }
@@ -218,7 +225,7 @@ function AppRoutes() {
       <Route
         path="/aml-program/policies"
         element={
-          <ProtectedRoute moduleKey="aml_program">
+          <ProtectedRoute nonAdminOnly moduleKey="aml_program">
             <AMLPolicies />
           </ProtectedRoute>
         }
@@ -226,7 +233,7 @@ function AppRoutes() {
       <Route
         path="/aml-program/risk-assessment"
         element={
-          <ProtectedRoute moduleKey="risk_assessment">
+          <ProtectedRoute nonAdminOnly moduleKey="risk_assessment">
             <AMLRiskAssessment />
           </ProtectedRoute>
         }
@@ -234,7 +241,7 @@ function AppRoutes() {
       <Route
         path="/aml-program/training"
         element={
-          <ProtectedRoute moduleKey="training">
+          <ProtectedRoute nonAdminOnly moduleKey="training">
             <AMLTraining />
           </ProtectedRoute>
         }
@@ -242,7 +249,7 @@ function AppRoutes() {
       <Route
         path="/aml-program/effectiveness"
         element={
-          <ProtectedRoute moduleKey="effectiveness">
+          <ProtectedRoute nonAdminOnly moduleKey="effectiveness">
             <AMLEffectiveness />
           </ProtectedRoute>
         }
@@ -250,7 +257,7 @@ function AppRoutes() {
       <Route
         path="/kyc-review"
         element={
-          <ProtectedRoute moduleKey="kyc">
+          <ProtectedRoute nonAdminOnly moduleKey="kyc">
             <KYCReview />
           </ProtectedRoute>
         }
@@ -258,7 +265,7 @@ function AppRoutes() {
       <Route
         path="/transaction-reporting"
         element={
-          <ProtectedRoute moduleKey="reporting">
+          <ProtectedRoute nonAdminOnly moduleKey="reporting">
             <TransactionReporting />
           </ProtectedRoute>
         }
@@ -266,7 +273,7 @@ function AppRoutes() {
       <Route
         path="/transaction-monitoring"
         element={
-          <ProtectedRoute moduleKey="monitoring">
+          <ProtectedRoute nonAdminOnly moduleKey="monitoring">
             <TransactionMonitoring />
           </ProtectedRoute>
         }
@@ -274,7 +281,7 @@ function AppRoutes() {
       <Route
         path="/transaction-monitoring/:submodule"
         element={
-          <ProtectedRoute moduleKey="monitoring">
+          <ProtectedRoute nonAdminOnly moduleKey="monitoring">
             <TransactionMonitoring />
           </ProtectedRoute>
         }
@@ -282,7 +289,7 @@ function AppRoutes() {
       <Route
         path="/client-files"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute nonAdminOnly>
             <ClientFiles />
           </ProtectedRoute>
         }
@@ -290,7 +297,7 @@ function AppRoutes() {
       <Route
         path="/findings"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute nonAdminOnly>
             <Findings />
           </ProtectedRoute>
         }
@@ -298,7 +305,7 @@ function AppRoutes() {
       <Route
         path="/audit-report"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute nonAdminOnly>
             <AuditReport />
           </ProtectedRoute>
         }

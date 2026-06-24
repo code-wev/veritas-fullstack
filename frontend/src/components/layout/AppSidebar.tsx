@@ -232,7 +232,7 @@ export function AppSidebar() {
 
   return (
     <aside className="w-60 border-r border-border bg-card flex flex-col shrink-0">
-      {selectedEngagement && (
+      {!isAdmin && selectedEngagement && (
         <div className="p-4 border-b border-border">
           <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
             Current Engagement
@@ -248,72 +248,74 @@ export function AppSidebar() {
       )}
 
       <nav className="flex-1 p-2 overflow-y-auto">
-        <div className="space-y-1">
-          {filterModules(modules)
-            .filter((mod) => mod.path !== '/msb-registration' || showMsbModule)
-            .map((module) =>
-            module.children ? (
-              <div key={module.path}>
-                <button
-                  onClick={() => toggleExpand(module.path)}
+        {!isAdmin && (
+          <div className="space-y-1">
+            {filterModules(modules)
+              .filter((mod) => mod.path !== '/msb-registration' || showMsbModule)
+              .map((module) =>
+              module.children ? (
+                <div key={module.path}>
+                  <button
+                    onClick={() => toggleExpand(module.path)}
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors w-full',
+                      isParentActive(module)
+                        ? 'bg-primary/10 text-primary font-medium'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    )}
+                  >
+                    <module.icon className="w-4 h-4 shrink-0" />
+                    <span className="truncate flex-1 text-left">{module.name}</span>
+                    {isExpanded(module) ? (
+                      <ChevronDown className="w-4 h-4 ml-auto shrink-0" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 ml-auto shrink-0" />
+                    )}
+                  </button>
+                  {isExpanded(module) && (
+                    <div className="ml-4 pl-3 border-l border-border mt-1 space-y-1">
+                      {module.children.map((child) => (
+                        <NavLink
+                          key={child.path}
+                          to={child.path}
+                          className={cn(
+                            'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors',
+                            isActive(child.path)
+                              ? 'bg-primary/10 text-primary font-medium'
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          )}
+                        >
+                          <child.icon className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{child.name}</span>
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <NavLink
+                  key={module.path}
+                  to={module.path}
                   className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors w-full',
-                    isParentActive(module)
+                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
+                    isActive(module.path)
                       ? 'bg-primary/10 text-primary font-medium'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   )}
                 >
                   <module.icon className="w-4 h-4 shrink-0" />
-                  <span className="truncate flex-1 text-left">{module.name}</span>
-                  {isExpanded(module) ? (
-                    <ChevronDown className="w-4 h-4 ml-auto shrink-0" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4 ml-auto shrink-0" />
+                  <span className="truncate">{module.name}</span>
+                  {isActive(module.path) && (
+                    <ChevronRight className="w-4 h-4 ml-auto" />
                   )}
-                </button>
-                {isExpanded(module) && (
-                  <div className="ml-4 pl-3 border-l border-border mt-1 space-y-1">
-                    {module.children.map((child) => (
-                      <NavLink
-                        key={child.path}
-                        to={child.path}
-                        className={cn(
-                          'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors',
-                          isActive(child.path)
-                            ? 'bg-primary/10 text-primary font-medium'
-                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                        )}
-                      >
-                        <child.icon className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{child.name}</span>
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <NavLink
-                key={module.path}
-                to={module.path}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
-                  isActive(module.path)
-                    ? 'bg-primary/10 text-primary font-medium'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                <module.icon className="w-4 h-4 shrink-0" />
-                <span className="truncate">{module.name}</span>
-                {isActive(module.path) && (
-                  <ChevronRight className="w-4 h-4 ml-auto" />
-                )}
-              </NavLink>
-            )
-          )}
-        </div>
+                </NavLink>
+              )
+            )}
+          </div>
+        )}
 
         {isAdmin && (
-          <div className="mt-6 pt-4 border-t border-border">
+          <div className="mt-2">
             <div className="px-3 mb-2 text-xs text-muted-foreground uppercase tracking-wider">
               Administration
             </div>
