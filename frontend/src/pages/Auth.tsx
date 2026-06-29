@@ -173,15 +173,15 @@ export default function Auth() {
   const getImageSrc = () => {
     switch (mode) {
       case 'signup':
-        return "https://www.figma.com/api/mcp/asset/5045b402-ccfb-4671-9184-a1eea04c507d";
+        return "/auth.jpg";
       case 'verify-otp':
-        return "https://www.figma.com/api/mcp/asset/805ffd5d-8604-42bc-b678-f7f0a3520779";
+        return "/auth.jpg";
       case 'forgot-password':
-        return "https://www.figma.com/api/mcp/asset/663bed5c-c7c7-40b8-91d0-2272e9637c36";
+        return "/auth.jpg";
       case 'reset-password':
-        return "https://www.figma.com/api/mcp/asset/9fdc2fcf-11da-4846-ba9d-6b6bf5eadff4";
+        return "/auth.jpg";
       default:
-        return "https://www.figma.com/api/mcp/asset/31c5688f-6743-453e-8f15-695d557c9859";
+        return "/auth.jpg";
     }
   };
 
@@ -221,10 +221,10 @@ export default function Auth() {
               <Link to="/" className="transition-opacity hover:opacity-90">
                 <img
                   src={
-                    mode === 'verify-otp' ? "https://www.figma.com/api/mcp/asset/b4cce569-3362-49ad-9416-197f945a53f5" :
-                    mode === 'reset-password' ? "https://www.figma.com/api/mcp/asset/c4eb79b5-f3df-486d-85d6-1089a765101f" :
-                    mode === 'forgot-password' ? "https://www.figma.com/api/mcp/asset/00282bc2-7b94-4257-9a02-13d3d5efc79c" :
-                    "https://www.figma.com/api/mcp/asset/f3d3f636-9ecc-481d-8db9-537207d4d41a"
+                    mode === 'verify-otp' ? "/favicon.svg" :
+                    mode === 'reset-password' ? "/favicon.svg" :
+                    mode === 'forgot-password' ? "/favicon.svg" :
+                    "/favicon.svg"
                   }
                   alt="Veritas logo mark"
                   className="h-[72px] w-20"
