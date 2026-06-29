@@ -16,13 +16,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { ArrowLeft, Building2, FolderOpen, LogOut, User, ChevronDown, Plus } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { ArrowLeft, Building2, FolderOpen, LogOut, User, ChevronDown } from 'lucide-react';
 import logoMark from '@/assets/logo-veritas-mark.png';
 import { useState } from 'react';
-import { CreateClientDialog } from '@/components/dialogs/CreateClientDialog';
-import { CreateEngagementDialog } from '@/components/dialogs/CreateEngagementDialog';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { ProfileDialog } from '@/components/dialogs/ProfileDialog';
 
 export function TopNav() {
   const {
@@ -37,9 +38,24 @@ export function TopNav() {
   } = useApp();
 
   const { role } = useUserRole();
+  const [showProfileDialog, setShowProfileDialog] = useState(false);
 
-  const [showClientDialog, setShowClientDialog] = useState(false);
-  const [showEngagementDialog, setShowEngagementDialog] = useState(false);
+  const { data: profile } = useQuery({
+    queryKey: ['user-profile', user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+
   const location = useLocation();
   const navigate = useNavigate();
   const showSwitchers = location.pathname !== '/' && role !== 'client_user';
@@ -62,8 +78,9 @@ export function TopNav() {
     }
   };
 
-  const userInitials = user?.user_metadata?.full_name
-    ? user.user_metadata.full_name
+  const displayName = profile?.full_name || user?.user_metadata?.full_name || 'User';
+  const userInitials = displayName
+    ? displayName
         .split(' ')
         .map((n: string) => n[0])
         .join('')
@@ -116,18 +133,6 @@ export function TopNav() {
                       No clients yet
                     </div>
                   )}
-                  <DropdownMenuSeparator />
-                  <div className="p-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-full justify-start"
-                      onClick={() => setShowClientDialog(true)}
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Client
-                    </Button>
-                  </div>
                 </SelectContent>
               </Select>
             </div>
@@ -154,18 +159,6 @@ export function TopNav() {
                         No engagements yet
                       </div>
                     )}
-                    <DropdownMenuSeparator />
-                    <div className="p-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-full justify-start"
-                        onClick={() => setShowEngagementDialog(true)}
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        New Engagement
-                      </Button>
-                    </div>
                   </SelectContent>
                 </Select>
               </div>
@@ -179,6 +172,7 @@ export function TopNav() {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="flex items-center gap-2">
             <Avatar className="h-8 w-8">
+              <AvatarImage src={profile?.avatar_url || undefined} alt="Profile" className="object-cover" />
               <AvatarFallback className="bg-primary/10 text-primary text-sm">
                 {userInitials}
               </AvatarFallback>
@@ -189,14 +183,14 @@ export function TopNav() {
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel>
             <div className="flex flex-col">
-              <span>{user?.user_metadata?.full_name || 'User'}</span>
+              <span>{displayName}</span>
               <span className="text-xs font-normal text-muted-foreground">
                 {user?.email}
               </span>
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setShowProfileDialog(true)}>
             <User className="w-4 h-4 mr-2" />
             Profile
           </DropdownMenuItem>
@@ -208,8 +202,7 @@ export function TopNav() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <CreateClientDialog open={showClientDialog} onOpenChange={setShowClientDialog} />
-      <CreateEngagementDialog open={showEngagementDialog} onOpenChange={setShowEngagementDialog} />
+      <ProfileDialog open={showProfileDialog} onOpenChange={setShowProfileDialog} />
     </header>
   );
 }
