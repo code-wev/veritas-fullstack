@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -34,72 +34,6 @@ interface ClientAssignment {
   assigned_at: string;
 }
 
-interface ModuleAssignmentRowProps {
-  moduleKey: string;
-  label: string;
-  userId: string;
-  engagementId: string;
-  isChecked: boolean;
-  onSuccess: () => void;
-}
-
-function ModuleAssignmentRow({ moduleKey, label, userId, engagementId, isChecked, onSuccess }: ModuleAssignmentRowProps) {
-  const { toast } = useToast();
-  
-  const toggleMutation = useMutation({
-    mutationFn: async ({ checked }: { checked: boolean }) => {
-      if (checked) {
-        const { error } = await supabase
-          .from('engagement_module_assignments')
-          .insert({
-            user_id: userId,
-            engagement_id: engagementId,
-            module: moduleKey,
-          });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('engagement_module_assignments')
-          .delete()
-          .eq('user_id', userId)
-          .eq('engagement_id', engagementId)
-          .eq('module', moduleKey);
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      onSuccess();
-      toast({ title: `${label} assignment updated` });
-    },
-    onError: (err: any) => {
-      toast({
-        title: 'Failed to update assignment',
-        description: err.message,
-        variant: 'destructive',
-      });
-    },
-  });
-
-  return (
-    <div className="flex items-center space-x-2 p-2 hover:bg-muted/50 rounded-md transition-colors">
-      <Checkbox
-        id={`mod-${moduleKey}`}
-        checked={isChecked}
-        onCheckedChange={(checked) => {
-          toggleMutation.mutate({ checked: !!checked });
-        }}
-        disabled={toggleMutation.isPending}
-      />
-      <Label 
-        htmlFor={`mod-${moduleKey}`} 
-        className="text-sm font-medium leading-none cursor-pointer flex-1 py-1"
-      >
-        {label}
-      </Label>
-    </div>
-  );
-}
-
 export default function SecurityAccess() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -111,8 +45,28 @@ export default function SecurityAccess() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   
-  const [selectedAssignmentUserId, setSelectedAssignmentUserId] = useState<string | null>(null);
-  const [selectedAssignmentEngagementId, setSelectedAssignmentEngagementId] = useState<string | null>(null);
+  const [selectedAssignmentUserId, setSelectedAssignmentUserId] = useState<string | null>(
+    () => sessionStorage.getItem('admin_sec_user_id')
+  );
+  const [selectedAssignmentEngagementId, setSelectedAssignmentEngagementId] = useState<string | null>(
+    () => sessionStorage.getItem('admin_sec_engagement_id')
+  );
+
+  useEffect(() => {
+    if (selectedAssignmentUserId) {
+      sessionStorage.setItem('admin_sec_user_id', selectedAssignmentUserId);
+    } else {
+      sessionStorage.removeItem('admin_sec_user_id');
+    }
+  }, [selectedAssignmentUserId]);
+
+  useEffect(() => {
+    if (selectedAssignmentEngagementId) {
+      sessionStorage.setItem('admin_sec_engagement_id', selectedAssignmentEngagementId);
+    } else {
+      sessionStorage.removeItem('admin_sec_engagement_id');
+    }
+  }, [selectedAssignmentEngagementId]);
   const [showClientDialog, setShowClientDialog] = useState(false);
   const [showEngagementDialog, setShowEngagementDialog] = useState(false);
   const [isCreateClientAccountOpen, setIsCreateClientAccountOpen] = useState(false);
@@ -120,6 +74,7 @@ export default function SecurityAccess() {
   const [newClientPassword, setNewClientPassword] = useState('');
   const [newClientFullName, setNewClientFullName] = useState('');
   const [showNewClientPassword, setShowNewClientPassword] = useState(false);
+  const [selectedModules, setSelectedModules] = useState<string[]>([]);
 
   const createClientAccountMutation = useMutation({
     mutationFn: async ({ email, password, fullName }: { email: string; password: string; fullName: string }) => {
@@ -199,7 +154,7 @@ export default function SecurityAccess() {
             </div>
           `;
 
-          const { data: rpcData, error: rpcError } = await supabase.rpc('send_resend_email', {
+          const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('send_resend_email', {
             to_email: email.trim().toLowerCase(),
             subject: "Welcome to Veritas AML Platform - Your Credentials",
             html_content: emailHtml,
@@ -207,8 +162,8 @@ export default function SecurityAccess() {
           });
 
           if (rpcError) throw rpcError;
-          if (rpcData?.success === false) {
-            throw new Error(rpcData.error || "Email delivery failed.");
+          if ((rpcData as any)?.success === false) {
+            throw new Error((rpcData as any).error || "Email delivery failed.");
           }
 
           emailSent = true;
@@ -377,6 +332,55 @@ export default function SecurityAccess() {
       return (data ?? []).map((d: any) => d.module) as string[];
     },
     enabled: !!selectedAssignmentUserId && !!selectedAssignmentEngagementId && isAdmin,
+  });
+
+  // Sync selectedModules state when data loads or selection changes
+  useEffect(() => {
+    if (userModuleAssignments) {
+      setSelectedModules(userModuleAssignments);
+    }
+  }, [userModuleAssignments, selectedAssignmentUserId, selectedAssignmentEngagementId]);
+
+  // Save modules mutation
+  const saveModulesMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedAssignmentUserId || !selectedAssignmentEngagementId) return;
+      
+      // Delete all existing assignments for this user and engagement
+      const { error: deleteError } = await supabase
+        .from('engagement_module_assignments')
+        .delete()
+        .eq('user_id', selectedAssignmentUserId)
+        .eq('engagement_id', selectedAssignmentEngagementId);
+        
+      if (deleteError) throw deleteError;
+      
+      // Insert new ones if any
+      if (selectedModules.length > 0) {
+        const inserts = selectedModules.map(mod => ({
+          user_id: selectedAssignmentUserId,
+          engagement_id: selectedAssignmentEngagementId,
+          module: mod,
+        }));
+        
+        const { error: insertError } = await supabase
+          .from('engagement_module_assignments')
+          .insert(inserts);
+          
+        if (insertError) throw insertError;
+      }
+    },
+    onSuccess: () => {
+      refetchModuleAssignments();
+      toast({ title: 'Module permissions saved successfully', description: 'The changes have been applied to the analyst.' });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to save module permissions',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
   });
 
   // Fetch if the selected user is assigned to the selected engagement
@@ -1113,20 +1117,36 @@ export default function SecurityAccess() {
                       { key: 'kyc', label: 'KYC Review' },
                       { key: 'reporting', label: 'Transaction Reporting' },
                       { key: 'monitoring', label: 'Transaction Monitoring' },
-                    ].map((mod) => {
-                      const isChecked = Array.isArray(userModuleAssignments) && userModuleAssignments.includes(mod.key);
-                      return (
-                        <ModuleAssignmentRow
-                          key={mod.key}
-                          moduleKey={mod.key}
-                          label={mod.label}
-                          userId={selectedAssignmentUserId}
-                          engagementId={selectedAssignmentEngagementId}
-                          isChecked={isChecked}
-                          onSuccess={refetchModuleAssignments}
+                    ].map((mod) => (
+                      <div key={mod.key} className="flex items-center space-x-2 p-2 hover:bg-muted/50 rounded-md transition-colors">
+                        <Checkbox
+                          id={`mod-${mod.key}`}
+                          checked={selectedModules.includes(mod.key)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedModules((prev) => [...prev, mod.key]);
+                            } else {
+                              setSelectedModules((prev) => prev.filter((k) => k !== mod.key));
+                            }
+                          }}
+                          disabled={saveModulesMutation.isPending}
                         />
-                      );
-                    })}
+                        <Label 
+                          htmlFor={`mod-${mod.key}`} 
+                          className="text-sm font-medium leading-none cursor-pointer flex-1 py-1"
+                        >
+                          {mod.label}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-end pt-4 border-t mt-4">
+                    <Button 
+                      onClick={() => saveModulesMutation.mutate()} 
+                      disabled={saveModulesMutation.isPending}
+                    >
+                      {saveModulesMutation.isPending ? 'Saving...' : 'Save Permissions'}
+                    </Button>
                   </div>
                 </div>
               ) : (
