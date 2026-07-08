@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { useToast } from '@/hooks/use-toast';
@@ -18,9 +18,17 @@ import { Textarea } from '@/components/ui/textarea';
 interface CreateEngagementDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  engagementToEdit?: {
+    id: string;
+    client_id: string;
+    name: string;
+    period_start: string;
+    period_end: string;
+    scope?: string;
+  } | null;
 }
 
-export function CreateEngagementDialog({ open, onOpenChange }: CreateEngagementDialogProps) {
+export function CreateEngagementDialog({ open, onOpenChange, engagementToEdit }: CreateEngagementDialogProps) {
   const [name, setName] = useState('');
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
@@ -29,58 +37,106 @@ export function CreateEngagementDialog({ open, onOpenChange }: CreateEngagementD
   const { user, selectedClient, refreshEngagements, setSelectedEngagement } = useApp();
   const { toast } = useToast();
 
+  useEffect(() => {
+    if (open) {
+      if (engagementToEdit) {
+        setName(engagementToEdit.name || '');
+        setPeriodStart(engagementToEdit.period_start || '');
+        setPeriodEnd(engagementToEdit.period_end || '');
+        setScope(engagementToEdit.scope || '');
+      } else {
+        setName('');
+        setPeriodStart('');
+        setPeriodEnd('');
+        setScope('');
+      }
+    }
+  }, [open, engagementToEdit]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !selectedClient) return;
 
     setLoading(true);
 
-    // Create engagement
-    const { data: engagementData, error: engagementError } = await supabase
-      .from('engagements')
-      .insert({
-        client_id: selectedClient.id,
-        name,
-        period_start: periodStart,
-        period_end: periodEnd,
-        scope: scope || null,
-        created_by: user.id,
-      })
-      .select()
-      .single();
+    if (engagementToEdit) {
+      const { error: engagementError } = await supabase
+        .from('engagements')
+        .update({
+          name,
+          period_start: periodStart,
+          period_end: periodEnd,
+          scope: scope || null,
+        })
+        .eq('id', engagementToEdit.id);
 
-    if (engagementError) {
+      if (engagementError) {
+        toast({
+          title: 'Error updating engagement',
+          description: engagementError.message,
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
       toast({
-        title: 'Error creating engagement',
-        description: engagementError.message,
-        variant: 'destructive',
+        title: 'Engagement updated',
+        description: `${name} has been updated successfully.`,
       });
+
+      await refreshEngagements();
+
       setLoading(false);
-      return;
+      onOpenChange(false);
+    } else {
+      // Create engagement
+      const { data: engagementData, error: engagementError } = await supabase
+        .from('engagements')
+        .insert({
+          client_id: selectedClient.id,
+          name,
+          period_start: periodStart,
+          period_end: periodEnd,
+          scope: scope || null,
+          created_by: user.id,
+        })
+        .select()
+        .single();
+
+      if (engagementError) {
+        toast({
+          title: 'Error creating engagement',
+          description: engagementError.message,
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Assign current user to engagement
+      await supabase.from('engagement_assignments').insert({
+        engagement_id: engagementData.id,
+        user_id: user.id,
+        assigned_by: user.id,
+      });
+
+      toast({
+        title: 'Engagement created',
+        description: `${name} has been created successfully.`,
+      });
+
+      await refreshEngagements();
+      setSelectedEngagement(engagementData);
+      
+      // Reset form
+      setName('');
+      setPeriodStart('');
+      setPeriodEnd('');
+      setScope('');
+      setLoading(false);
+      onOpenChange(false);
     }
-
-    // Assign current user to engagement
-    await supabase.from('engagement_assignments').insert({
-      engagement_id: engagementData.id,
-      user_id: user.id,
-      assigned_by: user.id,
-    });
-
-    toast({
-      title: 'Engagement created',
-      description: `${name} has been created successfully.`,
-    });
-
-    await refreshEngagements();
-    setSelectedEngagement(engagementData);
-    
-    // Reset form
-    setName('');
-    setPeriodStart('');
-    setPeriodEnd('');
-    setScope('');
-    setLoading(false);
-    onOpenChange(false);
   };
 
   // Generate default name based on year
@@ -100,9 +156,11 @@ export function CreateEngagementDialog({ open, onOpenChange }: CreateEngagementD
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>New Engagement</DialogTitle>
+          <DialogTitle>{engagementToEdit ? 'Edit Engagement' : 'New Engagement'}</DialogTitle>
           <DialogDescription>
-            Create a new AML Effectiveness Review engagement for {selectedClient?.name}.
+            {engagementToEdit 
+              ? `Update the details of this AML Effectiveness Review engagement for ${selectedClient?.name}.`
+              : `Create a new AML Effectiveness Review engagement for ${selectedClient?.name}.`}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
@@ -155,7 +213,7 @@ export function CreateEngagementDialog({ open, onOpenChange }: CreateEngagementD
               Cancel
             </Button>
             <Button type="submit" disabled={loading || !name || !periodStart || !periodEnd}>
-              {loading ? 'Creating...' : 'Create Engagement'}
+              {loading ? 'Saving...' : (engagementToEdit ? 'Save Changes' : 'Create Engagement')}
             </Button>
           </DialogFooter>
         </form>

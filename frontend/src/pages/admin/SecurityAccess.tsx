@@ -103,7 +103,7 @@ export default function SecurityAccess() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { role, isAdmin } = useUserRole();
-  const { selectedClient, user } = useApp();
+  const { selectedClient, user, refreshClients, refreshEngagements } = useApp();
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState<AppRole>('analyst');
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
@@ -114,6 +114,8 @@ export default function SecurityAccess() {
   const [selectedAssignmentEngagementId, setSelectedAssignmentEngagementId] = useState<string | null>(null);
   const [showClientDialog, setShowClientDialog] = useState(false);
   const [showEngagementDialog, setShowEngagementDialog] = useState(false);
+  const [clientToEdit, setClientToEdit] = useState<any>(null);
+  const [engagementToEdit, setEngagementToEdit] = useState<any>(null);
   const [isCreateClientAccountOpen, setIsCreateClientAccountOpen] = useState(false);
   const [newClientEmail, setNewClientEmail] = useState('');
   const [newClientPassword, setNewClientPassword] = useState('');
@@ -217,6 +219,7 @@ export default function SecurityAccess() {
     setShowClientDialog(open);
     if (!open) {
       queryClient.invalidateQueries({ queryKey: ['all-clients'] });
+      setClientToEdit(null);
     }
   };
 
@@ -224,6 +227,67 @@ export default function SecurityAccess() {
     setShowEngagementDialog(open);
     if (!open) {
       queryClient.invalidateQueries({ queryKey: ['admin-engagements-with-clients'] });
+      setEngagementToEdit(null);
+    }
+  };
+
+  // Delete client mutation
+  const deleteClientMutation = useMutation({
+    mutationFn: async (clientId: string) => {
+      const { error } = await supabase
+        .from('clients')
+        .delete()
+        .eq('id', clientId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['all-clients'] });
+      queryClient.invalidateQueries({ queryKey: ['client-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-engagements-with-clients'] });
+      refreshClients();
+      toast({ title: 'Client deleted successfully' });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to delete client',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  });
+
+  // Delete engagement mutation
+  const deleteEngagementMutation = useMutation({
+    mutationFn: async (engagementId: string) => {
+      const { error } = await supabase
+        .from('engagements')
+        .delete()
+        .eq('id', engagementId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-engagements-with-clients'] });
+      refreshEngagements();
+      toast({ title: 'Engagement deleted successfully' });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to delete engagement',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  });
+
+  const handleDeleteClient = (id: string, name: string) => {
+    if (window.confirm(`Are you sure you want to delete client "${name}"? This will delete all associated data (engagements, reviews, evidence files).`)) {
+      deleteClientMutation.mutate(id);
+    }
+  };
+
+  const handleDeleteEngagement = (id: string, name: string) => {
+    if (window.confirm(`Are you sure you want to delete engagement "${name}"? This will delete all associated audits, findings, and reviews.`)) {
+      deleteEngagementMutation.mutate(id);
     }
   };
 
@@ -562,7 +626,10 @@ export default function SecurityAccess() {
               <CardTitle className="text-lg font-bold">Clients</CardTitle>
               <CardDescription>All registered clients</CardDescription>
             </div>
-            <Button onClick={() => setShowClientDialog(true)} size="sm">
+            <Button onClick={() => {
+              setClientToEdit(null);
+              setShowClientDialog(true);
+            }} size="sm">
               <Plus className="w-4 h-4 mr-1" />
               Add Client
             </Button>
@@ -575,13 +642,36 @@ export default function SecurityAccess() {
             ) : (
               <div className="space-y-3">
                 {clients.map((client) => (
-                  <div key={client.id} className="p-3 border rounded-lg bg-card hover:bg-accent/20 transition-colors">
-                    <div className="font-semibold text-sm">{client.name}</div>
-                    {client.entity_type && (
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {client.entity_type}
-                      </div>
-                    )}
+                  <div key={client.id} className="p-3 border rounded-lg bg-card hover:bg-accent/20 transition-colors flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold text-sm">{client.name}</div>
+                      {client.entity_type && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {client.entity_type}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="w-8 h-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          setClientToEdit(client);
+                          setShowClientDialog(true);
+                        }}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="w-8 h-8 text-destructive hover:text-destructive/80"
+                        onClick={() => handleDeleteClient(client.id, client.name)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -605,7 +695,10 @@ export default function SecurityAccess() {
                 </span>
               )}
               <Button 
-                onClick={() => setShowEngagementDialog(true)} 
+                onClick={() => {
+                  setEngagementToEdit(null);
+                  setShowEngagementDialog(true);
+                }} 
                 size="sm"
                 disabled={!selectedClient}
                 title={!selectedClient ? "Select a client from the switcher first" : ""}
@@ -624,17 +717,38 @@ export default function SecurityAccess() {
               <div className="space-y-3">
                 {engagements.map((eng) => (
                   <div key={eng.id} className="p-3 border rounded-lg bg-card hover:bg-accent/20 transition-colors flex items-center justify-between">
-                    <div>
-                      <div className="font-semibold text-sm">{eng.name}</div>
-                      <div className="text-xs text-muted-foreground mt-1">
+                    <div className="min-w-0 flex-1 mr-2">
+                      <div className="font-semibold text-sm truncate">{eng.name}</div>
+                      <div className="text-xs text-muted-foreground mt-1 truncate">
                         Client: {eng.client_name}
                       </div>
                     </div>
-                    {eng.status && (
-                      <Badge variant={eng.status === 'completed' ? 'default' : 'outline'} className="capitalize text-xs">
-                        {eng.status.replace('_', ' ')}
-                      </Badge>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {eng.status && (
+                        <Badge variant={eng.status === 'completed' ? 'default' : 'outline'} className="capitalize text-xs">
+                          {eng.status.replace('_', ' ')}
+                        </Badge>
+                      )}
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="w-8 h-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          setEngagementToEdit(eng);
+                          setShowEngagementDialog(true);
+                        }}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="w-8 h-8 text-destructive hover:text-destructive/80"
+                        onClick={() => handleDeleteEngagement(eng.id, eng.name)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1087,8 +1201,8 @@ export default function SecurityAccess() {
         </CardContent>
       </Card>
 
-      <CreateClientDialog open={showClientDialog} onOpenChange={handleClientOpenChange} />
-      <CreateEngagementDialog open={showEngagementDialog} onOpenChange={handleEngagementOpenChange} />
+      <CreateClientDialog open={showClientDialog} onOpenChange={handleClientOpenChange} clientToEdit={clientToEdit} />
+      <CreateEngagementDialog open={showEngagementDialog} onOpenChange={handleEngagementOpenChange} engagementToEdit={engagementToEdit} />
     </div>
   );
 }
