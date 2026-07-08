@@ -4,6 +4,11 @@ VALUES ('avatars', 'avatars', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Storage policies for avatars
+DROP POLICY IF EXISTS "Allow public read access to avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Allow authenticated users to insert avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Allow authenticated users to update avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Allow authenticated users to delete avatars" ON storage.objects;
+
 CREATE POLICY "Allow public read access to avatars"
 ON storage.objects FOR SELECT
 USING (bucket_id = 'avatars');
