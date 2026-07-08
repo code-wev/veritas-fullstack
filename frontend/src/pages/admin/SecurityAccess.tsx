@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useApp } from '@/contexts/AppContext';
-import { createClient } from '@supabase/supabase-js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -123,99 +122,36 @@ export default function SecurityAccess() {
 
   const createClientAccountMutation = useMutation({
     mutationFn: async ({ email, password, fullName }: { email: string; password: string; fullName: string }) => {
-      if (!import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY) {
-        throw new Error("Supabase Service Role Key is not configured in .env file (VITE_SUPABASE_SERVICE_ROLE_KEY). Please add it to your local environment to enable admin user creation.");
-      }
-
-      // 1. Initialize admin client
-      const adminClient = createClient(
-        import.meta.env.VITE_SUPABASE_URL,
-        import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY,
-        {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-          }
-        }
-      );
-
-      // 2. Create user in auth.users
-      const { data: userData, error: createError } = await adminClient.auth.admin.createUser({
-        email: email.trim().toLowerCase(),
-        password: password,
-        email_confirm: true, // Auto-confirm email so they can log in immediately
-        user_metadata: {
-          full_name: fullName.trim(),
-          needs_password_change: true,
+      // 1. Create user via Edge Function
+      const { data: userData, error: createError } = await supabase.functions.invoke('manage-users', {
+        body: {
+          action: 'createUser',
+          email: email.trim().toLowerCase(),
+          password: password,
+          fullName: fullName.trim(),
         }
       });
-
-      if (createError) throw createError;
-      if (!userData.user) throw new Error("Failed to create user account.");
-
-      const newUserId = userData.user.id;
-
-      // 3. Assign role 'client_user'
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert({ user_id: newUserId, role: 'client_user' });
-
-      if (roleError) {
-        // Cleanup user if role assignment fails
-        await adminClient.auth.admin.deleteUser(newUserId);
-        throw roleError;
+      if (createError || !userData?.user) {
+        throw new Error(createError?.message || "Failed to create user account.");
       }
 
-      // 4. Send actual credentials email via database RPC to bypass CORS
+      // 2. Send credentials email via Edge Function
       let emailSent = false;
       let emailErrorMsg = '';
 
-      const resendApiKey = import.meta.env.VITE_RESEND_API_KEY;
-
-      if (!resendApiKey) {
-        emailErrorMsg = "VITE_RESEND_API_KEY is not configured in your .env file.";
-      } else {
-        try {
-          const emailHtml = `
-            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-              <h2 style="color: #1E3A8A; margin-bottom: 4px;">Veritas Compliance Platform</h2>
-              <p style="color: #64748B; font-size: 14px; margin-top: 0; margin-bottom: 24px;">Secure AML Auditing & Review</p>
-              
-              <p>Hello <strong>${fullName.trim()}</strong>,</p>
-              <p>An administrator has created a client user account for you. You can log in using the temporary credentials below:</p>
-              
-              <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 16px; border-radius: 6px; margin: 20px 0;">
-                <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Login Email:</strong> <span style="font-family: monospace;">${email.trim().toLowerCase()}</span></p>
-                <p style="margin: 0; font-size: 14px;"><strong>Temporary Password:</strong> <span style="font-family: monospace;">${password}</span></p>
-              </div>
-              
-              <p><strong>Next Steps:</strong></p>
-              <p>For your security, you will be prompted to change this temporary password and complete your profile setup (including uploading an optional profile picture) upon your first login.</p>
-              
-              <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 24px 0;" />
-              <p style="color: #94A3B8; font-size: 12px; line-height: 1.5; margin: 0;">
-                This is an automated onboarding notification. Please contact your Veritas compliance administrator if you did not request this account.
-              </p>
-            </div>
-          `;
-
-          const { data: rpcData, error: rpcError } = await supabase.rpc('send_resend_email', {
-            to_email: email.trim().toLowerCase(),
-            subject: "Welcome to Veritas AML Platform - Your Credentials",
-            html_content: emailHtml,
-            resend_api_key: resendApiKey
-          });
-
-          if (rpcError) throw rpcError;
-          if (rpcData?.success === false) {
-            throw new Error(rpcData.error || "Email delivery failed.");
+      try {
+        const { data: emailData, error: emailError } = await supabase.functions.invoke('send-client-credentials', {
+          body: {
+            email: email.trim().toLowerCase(),
+            password: password,
+            fullName: fullName.trim(),
           }
-
-          emailSent = true;
-        } catch (err: any) {
-          console.error("Failed to send onboarding email:", err);
-          emailErrorMsg = err.message || "Failed to call send_resend_email RPC.";
-        }
+        });
+        if (emailError) throw emailError;
+        emailSent = emailData?.emailSent ?? true;
+      } catch (err: any) {
+        console.error("Failed to send onboarding email:", err);
+        emailErrorMsg = err.message || "Failed to call send-client-credentials Edge Function.";
       }
       
       return { email, password, emailSent, emailErrorMsg };
@@ -487,33 +423,15 @@ export default function SecurityAccess() {
   // Delete user account mutation (removes user from Auth, roles, profiles, and assignments)
   const deleteUserRoleMutation = useMutation({
     mutationFn: async (userId: string) => {
-      // 1. Delete assignments & roles first to avoid foreign key constraint issues
-      await supabase.from('client_assignments').delete().eq('user_id', userId);
-      await supabase.from('engagement_assignments').delete().eq('user_id', userId);
-      await supabase.from('engagement_module_assignments').delete().eq('user_id', userId);
-      await supabase.from('user_roles').delete().eq('user_id', userId);
-
-      // 2. Delete from auth.users using admin client
-      if (!import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY) {
-        throw new Error("Supabase Service Role Key is not configured in .env file (VITE_SUPABASE_SERVICE_ROLE_KEY). Please add it to your local environment to enable admin user deletion.");
-      }
-
-      const adminClient = createClient(
-        import.meta.env.VITE_SUPABASE_URL,
-        import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY,
-        {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-          }
+      const { error } = await supabase.functions.invoke('manage-users', {
+        body: {
+          action: 'deleteUser',
+          userId,
         }
-      );
-
-      const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(userId);
-      if (deleteAuthError) throw deleteAuthError;
-
-      // 3. Delete profile last (if database trigger/cascade didn't do it)
-      await supabase.from('profiles').delete().eq('id', userId);
+      });
+      if (error) {
+        throw new Error(error.message || "Failed to delete user account.");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
