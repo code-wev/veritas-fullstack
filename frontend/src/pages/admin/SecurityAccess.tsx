@@ -122,17 +122,18 @@ export default function SecurityAccess() {
 
   const createClientAccountMutation = useMutation({
     mutationFn: async ({ email, password, fullName }: { email: string; password: string; fullName: string }) => {
-      // 1. Create user via Edge Function
-      const { data: userData, error: createError } = await supabase.functions.invoke('manage-users', {
-        body: {
-          action: 'createUser',
-          email: email.trim().toLowerCase(),
-          password: password,
-          fullName: fullName.trim(),
-        }
+      // 1. Create user via Database RPC (securely inside the database)
+      const { data, error: createError } = await supabase.rpc('admin_create_user', {
+        _email: email.trim().toLowerCase(),
+        _password: password,
+        _full_name: fullName.trim(),
       });
-      if (createError || !userData?.user) {
-        throw new Error(createError?.message || "Failed to create user account.");
+      
+      if (createError) {
+        throw new Error(createError.message || "Failed to create user account.");
+      }
+      if (data?.success === false) {
+        throw new Error(data.error || "Failed to create user account.");
       }
 
       // 2. Send credentials email via Edge Function
@@ -423,14 +424,14 @@ export default function SecurityAccess() {
   // Delete user account mutation (removes user from Auth, roles, profiles, and assignments)
   const deleteUserRoleMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const { error } = await supabase.functions.invoke('manage-users', {
-        body: {
-          action: 'deleteUser',
-          userId,
-        }
+      const { data, error } = await supabase.rpc('admin_delete_user', {
+        _user_id: userId,
       });
       if (error) {
         throw new Error(error.message || "Failed to delete user account.");
+      }
+      if (data?.success === false) {
+        throw new Error(data?.error || "Failed to delete user account.");
       }
     },
     onSuccess: () => {
