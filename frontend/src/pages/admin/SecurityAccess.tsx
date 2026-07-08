@@ -1205,44 +1205,46 @@ export default function SecurityAccess() {
       <CreateEngagementDialog open={showEngagementDialog} onOpenChange={handleEngagementOpenChange} engagementToEdit={engagementToEdit} />
 
       <AlertDialog open={itemToDelete !== null} onOpenChange={(open) => !open && setItemToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive flex items-center gap-2">
-              Confirm Delete
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-foreground mt-2">
-              {itemToDelete?.type === 'client' ? (
-                <span>
-                  Are you sure you want to delete client <strong>{itemToDelete.name}</strong>? 
-                  This action is permanent and will cascade delete all associated data, including engagements, reviews, and documents.
-                </span>
-              ) : (
-                <span>
-                  Are you sure you want to delete engagement <strong>{itemToDelete.name}</strong>? 
-                  This action is permanent and will cascade delete all associated reviews, audits, and findings.
-                </span>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={() => {
-                if (itemToDelete) {
-                  if (itemToDelete.type === 'client') {
-                    deleteClientMutation.mutate(itemToDelete.id);
-                  } else {
-                    deleteEngagementMutation.mutate(itemToDelete.id);
+        {itemToDelete && (
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-destructive flex items-center gap-2">
+                Confirm Delete
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-foreground mt-2">
+                {itemToDelete.type === 'client' ? (
+                  <span>
+                    Are you sure you want to delete client <strong>{itemToDelete.name}</strong>? 
+                    This action is permanent and will cascade delete all associated data, including engagements, reviews, and documents.
+                  </span>
+                ) : (
+                  <span>
+                    Are you sure you want to delete engagement <strong>{itemToDelete.name}</strong>? 
+                    This action is permanent and will cascade delete all associated reviews, audits, and findings.
+                  </span>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={() => {
+                  if (itemToDelete) {
+                    if (itemToDelete.type === 'client') {
+                      deleteClientMutation.mutate(itemToDelete.id);
+                    } else {
+                      deleteEngagementMutation.mutate(itemToDelete.id);
+                    }
+                    setItemToDelete(null);
                   }
-                  setItemToDelete(null);
-                }
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        )}
       </AlertDialog>
     </div>
   );
