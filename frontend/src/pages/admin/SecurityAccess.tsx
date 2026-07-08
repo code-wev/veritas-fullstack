@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -43,71 +43,7 @@ interface ClientAssignment {
   assigned_at: string;
 }
 
-interface ModuleAssignmentRowProps {
-  moduleKey: string;
-  label: string;
-  userId: string;
-  engagementId: string;
-  isChecked: boolean;
-  onSuccess: () => void;
-}
 
-function ModuleAssignmentRow({ moduleKey, label, userId, engagementId, isChecked, onSuccess }: ModuleAssignmentRowProps) {
-  const { toast } = useToast();
-  
-  const toggleMutation = useMutation({
-    mutationFn: async ({ checked }: { checked: boolean }) => {
-      if (checked) {
-        const { error } = await supabase
-          .from('engagement_module_assignments')
-          .insert({
-            user_id: userId,
-            engagement_id: engagementId,
-            module: moduleKey,
-          });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('engagement_module_assignments')
-          .delete()
-          .eq('user_id', userId)
-          .eq('engagement_id', engagementId)
-          .eq('module', moduleKey);
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      onSuccess();
-      toast({ title: `${label} assignment updated` });
-    },
-    onError: (err: any) => {
-      toast({
-        title: 'Failed to update assignment',
-        description: err.message,
-        variant: 'destructive',
-      });
-    },
-  });
-
-  return (
-    <div className="flex items-center space-x-2 p-2 hover:bg-muted/50 rounded-md transition-colors">
-      <Checkbox
-        id={`mod-${moduleKey}`}
-        checked={isChecked}
-        onCheckedChange={(checked) => {
-          toggleMutation.mutate({ checked: !!checked });
-        }}
-        disabled={toggleMutation.isPending}
-      />
-      <Label 
-        htmlFor={`mod-${moduleKey}`} 
-        className="text-sm font-medium leading-none cursor-pointer flex-1 py-1"
-      >
-        {label}
-      </Label>
-    </div>
-  );
-}
 
 export default function SecurityAccess() {
   const { toast } = useToast();
@@ -126,6 +62,7 @@ export default function SecurityAccess() {
   const [showEngagementDialog, setShowEngagementDialog] = useState(false);
   const [clientToEdit, setClientToEdit] = useState<any>(null);
   const [engagementToEdit, setEngagementToEdit] = useState<any>(null);
+  const [tempSelectedModules, setTempSelectedModules] = useState<string[]>([]);
   const [isCreateClientAccountOpen, setIsCreateClientAccountOpen] = useState(false);
   const [newClientEmail, setNewClientEmail] = useState('');
   const [newClientPassword, setNewClientPassword] = useState('');
@@ -420,6 +357,56 @@ export default function SecurityAccess() {
       return !!data;
     },
     enabled: !!selectedAssignmentUserId && !!selectedAssignmentEngagementId && isAdmin,
+  });
+
+  useEffect(() => {
+    if (userModuleAssignments) {
+      setTempSelectedModules(userModuleAssignments);
+    } else {
+      setTempSelectedModules([]);
+    }
+  }, [userModuleAssignments, selectedAssignmentUserId, selectedAssignmentEngagementId]);
+
+  // Save module scoping assignments mutation
+  const saveModuleScopingMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedAssignmentUserId || !selectedAssignmentEngagementId) return;
+
+      // 1. Delete all existing module assignments for this user and engagement
+      const { error: deleteError } = await supabase
+        .from('engagement_module_assignments')
+        .delete()
+        .eq('user_id', selectedAssignmentUserId)
+        .eq('engagement_id', selectedAssignmentEngagementId);
+      
+      if (deleteError) throw deleteError;
+
+      // 2. Insert new selections
+      if (tempSelectedModules.length > 0) {
+        const insertData = tempSelectedModules.map((moduleKey) => ({
+          user_id: selectedAssignmentUserId,
+          engagement_id: selectedAssignmentEngagementId,
+          module: moduleKey,
+        }));
+
+        const { error: insertError } = await supabase
+          .from('engagement_module_assignments')
+          .insert(insertData);
+
+        if (insertError) throw insertError;
+      }
+    },
+    onSuccess: () => {
+      refetchModuleAssignments();
+      toast({ title: 'Module scoping assignments saved successfully' });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to save module assignments',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
   });
 
   // Toggle engagement assignment mutation
@@ -1172,19 +1159,34 @@ export default function SecurityAccess() {
                       { key: 'reporting', label: 'Transaction Reporting' },
                       { key: 'monitoring', label: 'Transaction Monitoring' },
                     ].map((mod) => {
-                      const isChecked = Array.isArray(userModuleAssignments) && userModuleAssignments.includes(mod.key);
+                      const isChecked = tempSelectedModules.includes(mod.key);
                       return (
-                        <ModuleAssignmentRow
-                          key={mod.key}
-                          moduleKey={mod.key}
-                          label={mod.label}
-                          userId={selectedAssignmentUserId}
-                          engagementId={selectedAssignmentEngagementId}
-                          isChecked={isChecked}
-                          onSuccess={refetchModuleAssignments}
-                        />
+                        <div key={mod.key} className="flex items-center space-x-2 p-2 hover:bg-muted/50 rounded-md transition-colors">
+                          <Checkbox
+                            id={`mod-${mod.key}`}
+                            checked={isChecked}
+                            onCheckedChange={(checked) => {
+                              setTempSelectedModules(prev => 
+                                checked 
+                                  ? [...prev, mod.key] 
+                                  : prev.filter(m => m !== mod.key)
+                              );
+                            }}
+                          />
+                          <Label htmlFor={`mod-${mod.key}`} className="text-sm font-medium cursor-pointer flex-1">
+                            {mod.label}
+                          </Label>
+                        </div>
                       );
                     })}
+                  </div>
+                  <div className="flex justify-end pt-4 border-t mt-4">
+                    <Button 
+                      onClick={() => saveModuleScopingMutation.mutate()} 
+                      disabled={saveModuleScopingMutation.isPending}
+                    >
+                      {saveModuleScopingMutation.isPending ? "Saving..." : "Save Scoping Assignments"}
+                    </Button>
                   </div>
                 </div>
               ) : (
