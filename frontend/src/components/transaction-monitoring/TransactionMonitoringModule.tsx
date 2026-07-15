@@ -173,7 +173,7 @@ export function TransactionMonitoringModule({ engagementId, initialSubmodule }: 
       )}
 
       {/* 4) Submodule summary */}
-      <SubmoduleSummaryCard reviewId={reviewId} submodule={activeKey} submoduleLabel={activeMeta?.label ?? activeKey} />
+      <SubmoduleSummaryCard engagementId={engagementId} reviewId={reviewId} submodule={activeKey} submoduleLabel={activeMeta?.label ?? activeKey} />
     </div>
   );
 }

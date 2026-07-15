@@ -8,8 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Save } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface Props {
+  engagementId: string;
   reviewId: string;
   submodule: string;
   submoduleLabel: string;
@@ -17,8 +19,9 @@ interface Props {
 
 const RESULT_POINTS: Record<string, number> = { pass: 2, partial: 1, fail: 0, na: 0 };
 
-export function SubmoduleSummaryCard({ reviewId, submodule, submoduleLabel }: Props) {
+export function SubmoduleSummaryCard({ engagementId, reviewId, submodule, submoduleLabel }: Props) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [row, setRow] = useState<{
@@ -62,7 +65,20 @@ export function SubmoduleSummaryCard({ reviewId, submodule, submoduleLabel }: Pr
   const save = async () => {
     setSaving(true);
     const points = row.test_result ? RESULT_POINTS[row.test_result] ?? null : null;
-    const { error } = await supabase.from('tm_submodule_status').upsert(
+    const isDeficiency = row.test_result === 'fail' || row.test_result === 'partial';
+    const isObservation = row.test_result === 'pass' && !!row.observation_best_practice?.trim();
+    
+    const findingTypeVal =
+      row.test_result === 'fail'
+        ? 'partial_important'
+        : row.test_result === 'partial'
+        ? 'partial_moderate'
+        : isObservation
+        ? 'observation'
+        : null;
+
+    // 1. Upsert submodule status
+    const { error: statusErr } = await supabase.from('tm_submodule_status').upsert(
       {
         review_id: reviewId,
         submodule,
@@ -70,7 +86,8 @@ export function SubmoduleSummaryCard({ reviewId, submodule, submoduleLabel }: Pr
         test_result: row.test_result,
         points_achieved: points,
         max_points: 2,
-        deficiency_flag: row.test_result === 'fail' || row.test_result === 'partial',
+        deficiency_flag: isDeficiency,
+        finding_type: findingTypeVal,
         summary_narrative: row.summary_narrative,
         observation_best_practice: row.observation_best_practice,
         evidence_reviewed: row.evidence_reviewed,
@@ -79,11 +96,83 @@ export function SubmoduleSummaryCard({ reviewId, submodule, submoduleLabel }: Pr
       },
       { onConflict: 'review_id,submodule' },
     );
-    if (error) {
-      toast({ title: 'Save failed', description: error.message, variant: 'destructive' });
-    } else {
-      toast({ title: 'Saved' });
+
+    if (statusErr) {
+      toast({ title: 'Save failed', description: statusErr.message, variant: 'destructive' });
+      setSaving(false);
+      return;
     }
+
+    // 2. Sync finding/deficiency to tm_findings which mirrors to central findings
+    try {
+      if (isDeficiency || isObservation) {
+        const descParts = [];
+        if (row.summary_narrative) descParts.push(`Summary narrative: ${row.summary_narrative}`);
+        if (row.evidence_reviewed) descParts.push(`Evidence reviewed: ${row.evidence_reviewed}`);
+        if (row.document_reference) descParts.push(`Document reference: ${row.document_reference}`);
+        if (row.comments) descParts.push(`Comments: ${row.comments}`);
+        const description = descParts.join('\n') || `Deficiency identified in ${submoduleLabel}.`;
+
+        const severityVal =
+          row.test_result === 'fail'
+            ? 'high'
+            : row.test_result === 'partial'
+            ? 'medium'
+            : 'observation';
+
+        const { data: existingFind } = await supabase
+          .from('tm_findings')
+          .select('id')
+          .eq('review_id', reviewId)
+          .eq('submodule', submodule)
+          .maybeSingle();
+
+        const findingPayload = {
+          engagement_id: engagementId,
+          review_id: reviewId,
+          submodule,
+          finding_title: `${submoduleLabel} Deficiency`,
+          finding_description: description,
+          recommendation: row.observation_best_practice || null,
+          severity: severityVal,
+          finding_type: findingTypeVal,
+          status: 'open',
+          is_auto_generated: true,
+        } as any;
+
+        if (existingFind?.id) {
+          const { error: findErr } = await supabase
+            .from('tm_findings')
+            .update(findingPayload)
+            .eq('id', existingFind.id);
+          if (findErr) throw findErr;
+        } else {
+          const { error: findErr } = await supabase
+            .from('tm_findings')
+            .insert(findingPayload);
+          if (findErr) throw findErr;
+        }
+      } else {
+        // Delete if exists since it's no longer a deficiency or observation
+        const { error: delErr } = await supabase
+          .from('tm_findings')
+          .delete()
+          .eq('review_id', reviewId)
+          .eq('submodule', submodule);
+        if (delErr) throw delErr;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['findings', engagementId] });
+      toast({ title: 'Saved & synced findings' });
+    } catch (findSyncErr: any) {
+      console.error('[sync] failed:', findSyncErr);
+      toast({ 
+        title: 'Saved but failed to sync findings', 
+        description: findSyncErr.message || 'Unknown error', 
+        variant: 'destructive'
+      });
+    }
+
     setSaving(false);
   };
 

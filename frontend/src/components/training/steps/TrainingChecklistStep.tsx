@@ -159,8 +159,8 @@ export function TrainingChecklistStep({ reviewId }: { reviewId: string }) {
               <AccordionTrigger className="hover:no-underline">
                 <div className="flex items-center justify-between w-full pr-4">
                   <div className="flex items-center gap-3">
-                    <Badge variant="outline" className="font-mono">{code}</Badge>
-                    <span className="font-semibold">{group.name}</span>
+                     <Badge variant="outline" className="font-mono">{code}</Badge>
+                    <span className="font-semibold text-primary">{group.name}</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span>{sectionAnswered}/{group.items.length} answered</span>
@@ -180,8 +180,8 @@ export function TrainingChecklistStep({ reviewId }: { reviewId: string }) {
                       <CardContent className="p-4 space-y-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <div className="font-semibold text-sm">{item.control_area}</div>
-                            <div className="text-sm text-muted-foreground mt-1">{item.control_objective}</div>
+                            <div className="font-semibold text-sm text-primary">{item.control_area}</div>
+                            <div className="text-sm text-primary/80 mt-1">{item.control_objective}</div>
                           </div>
                           {item.response && (
                             item.deficiency_flag ? (
@@ -203,7 +203,7 @@ export function TrainingChecklistStep({ reviewId }: { reviewId: string }) {
 
                         <div className="grid md:grid-cols-2 gap-3">
                           <div className="space-y-1">
-                            <Label className="text-xs">Result</Label>
+                            <Label className="text-xs font-semibold text-primary">Result</Label>
                             <Select value={item.response ?? ''} onValueChange={(v) => updateResult(item.id, { response: v })}>
                               <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
                               <SelectContent>
@@ -214,7 +214,7 @@ export function TrainingChecklistStep({ reviewId }: { reviewId: string }) {
                             </Select>
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-xs">Points</Label>
+                            <Label className="text-xs font-semibold text-primary">Points</Label>
                             <div className="h-10 flex items-center px-3 border rounded-md bg-muted/50 text-sm font-mono">
                               {item.points_achieved ?? 0} / {item.max_points}
                             </div>
@@ -222,7 +222,7 @@ export function TrainingChecklistStep({ reviewId }: { reviewId: string }) {
                         </div>
 
                         <div className="space-y-1">
-                          <Label className="text-xs">Document Reference</Label>
+                          <Label className="text-xs font-semibold text-primary">Document Reference</Label>
                           <Input
                             placeholder="e.g. Training Policy v1.3, Section 4.2..."
                             value={item.evidence_reviewed ?? ''}
@@ -232,7 +232,7 @@ export function TrainingChecklistStep({ reviewId }: { reviewId: string }) {
 
                         <div className="grid md:grid-cols-2 gap-3">
                           <div className="space-y-1">
-                            <Label className="text-xs">Comments / Deficiency Notes</Label>
+                            <Label className="text-xs font-semibold text-primary">Comments / Deficiency Notes</Label>
                             <Textarea
                               rows={2}
                               placeholder="Factual notes about deficiencies..."
@@ -241,7 +241,7 @@ export function TrainingChecklistStep({ reviewId }: { reviewId: string }) {
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-xs">Observation / Best Practice</Label>
+                            <Label className="text-xs font-semibold text-primary">Observation / Best Practice</Label>
                             <Textarea
                               rows={2}
                               placeholder="Improvement opportunities (not deficiencies)..."

@@ -297,14 +297,28 @@ export function ModuleWorkflowBanner({
                 </Button>
               )}
               {lockState === 'manager_review' && (
-                <Button 
-                  size="sm"
-                  variant="outline"
-                  onClick={() => transitionMutation.mutate('partner_review')}
-                  disabled={transitionMutation.isPending}
-                >
-                  Submit for Partner Review <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to return this module to draft? The analyst will be able to edit it again.')) {
+                        transitionMutation.mutate('draft');
+                      }
+                    }}
+                    disabled={transitionMutation.isPending}
+                  >
+                    Return to Draft
+                  </Button>
+                  <Button 
+                    size="sm"
+                    variant="outline"
+                    onClick={() => transitionMutation.mutate('partner_review')}
+                    disabled={transitionMutation.isPending}
+                  >
+                    Submit for Partner Review <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                  </Button>
+                </div>
               )}
             </>
           )}
@@ -335,6 +349,36 @@ export function ModuleWorkflowBanner({
                     >
                       Move to Partner Review
                     </Button>
+                  )}
+                  {lockState === 'partner_review' && (
+                    <>
+                      <Button 
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          if (window.confirm('Are you sure you want to return this module to manager review?')) {
+                            transitionMutation.mutate('manager_review');
+                          }
+                        }}
+                        disabled={transitionMutation.isPending}
+                        className="mr-1"
+                      >
+                        Return to Manager
+                      </Button>
+                      <Button 
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          if (window.confirm('Are you sure you want to return this module to draft?')) {
+                            transitionMutation.mutate('draft');
+                          }
+                        }}
+                        disabled={transitionMutation.isPending}
+                        className="mr-1"
+                      >
+                        Return to Draft
+                      </Button>
+                    </>
                   )}
                   <Button 
                     size="sm"

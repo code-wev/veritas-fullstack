@@ -53,7 +53,7 @@ export function useEngagementRecentWork(engagementId: string | undefined, userId
 }
 
 export interface PendingTaskItem {
-  kind: 'draft_finding' | 'pending_review';
+  kind: 'draft_finding' | 'pending_review' | 'pending_module_review';
   id: string;
   title: string;
   module: string;
@@ -61,12 +61,66 @@ export interface PendingTaskItem {
   finding_type: string | null;
 }
 
+const MODULE_INFOS = [
+  { table: 'tm_reviews', key: 'transaction_monitoring', label: 'Transaction Monitoring' },
+  { table: 'governance_summary', key: 'governance', label: 'Governance' },
+  { table: 'msb_registrations', key: 'msb_registration', label: 'MSB Registration' },
+  { table: 'training_reviews', key: 'training', label: 'Training' },
+  { table: 'effectiveness_reviews', key: 'effectiveness', label: 'Effectiveness' },
+  { table: 'risk_assessment_reviews', key: 'risk_assessment', label: 'Risk Assessment' },
+  { table: 'reporting_reviews', key: 'reporting', label: 'Transaction Reporting' },
+  { table: 'kyc_reviews', key: 'kyc', label: 'KYC Review' },
+  { table: 'aml_program_reviews', key: 'aml_program', label: 'AML Program' }
+];
+
 export function useEngagementPendingTasks(engagementId: string | undefined, userId: string | undefined) {
   return useQuery({
     queryKey: ['eng-pending-tasks', engagementId, userId],
     enabled: !!engagementId && !!userId,
     queryFn: async (): Promise<PendingTaskItem[]> => {
       if (!engagementId || !userId) return [];
+
+      const now = Date.now();
+      const items: PendingTaskItem[] = [];
+
+      // Get user role
+      const { data: roleResult } = await supabase.rpc('get_user_role', { _user_id: userId });
+      const role = roleResult as string | null;
+
+      let targetState: string | null = null;
+      if (role === 'manager') {
+        targetState = 'manager_review';
+      } else if (role === 'partner' || role === 'admin') {
+        targetState = 'partner_review';
+      }
+
+      if (targetState) {
+        const promises = MODULE_INFOS.map(async (info) => {
+          try {
+            const { data, error } = await supabase
+              .from(info.table as any)
+              .select('id, lock_state, updated_at')
+              .eq('engagement_id', engagementId)
+              .eq('lock_state', targetState)
+              .maybeSingle();
+
+            if (!error && data) {
+              const age = Math.floor((now - new Date((data as any).updated_at || now).getTime()) / 86400000);
+              items.push({
+                kind: 'pending_module_review',
+                id: (data as any).id,
+                title: `${info.label} module awaiting review`,
+                module: info.key,
+                finding_type: null,
+                age_days: Math.max(0, age),
+              });
+            }
+          } catch (e) {
+            console.error(`Error querying pending tasks for ${info.table}:`, e);
+          }
+        });
+        await Promise.all(promises);
+      }
 
       // Findings still in draft authored by this user — they own moving them forward
       const draftFindingsRes = await supabase
@@ -87,8 +141,6 @@ export function useEngagementPendingTasks(engagementId: string | undefined, user
         .order('created_at', { ascending: true })
         .limit(10);
 
-      const now = Date.now();
-      const items: PendingTaskItem[] = [];
       for (const f of draftFindingsRes.data ?? []) {
         items.push({
           kind: 'draft_finding',
