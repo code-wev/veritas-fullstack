@@ -437,8 +437,12 @@ export default function Dashboard() {
                         <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium truncate">{t.title}</p>
-                            <p className="text-[11px] text-muted-foreground capitalize">
-                              {t.kind === 'pending_review' ? 'Audit report' : `${t.module.replace(/_/g, ' ')} · draft`}
+                            <p className="text-[11px] text-muted-foreground capitalize font-semibold text-primary">
+                              {t.kind === 'pending_review' 
+                                ? 'Audit report' 
+                                : t.kind === 'pending_module_review'
+                                ? 'Awaiting Review'
+                                : `${t.module.replace(/_/g, ' ')} · draft`}
                             </p>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">

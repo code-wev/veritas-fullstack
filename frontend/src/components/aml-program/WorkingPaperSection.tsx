@@ -609,7 +609,7 @@ export function WorkingPaperSection({ ppReviewId, engagementId, clientContext }:
               <AccordionItem value={sec.code} key={sec.code}>
                 <AccordionTrigger className="hover:no-underline">
                   <div className="flex items-center gap-2 flex-1 text-left">
-                    <span className="text-sm font-medium">
+                    <span className="text-sm font-semibold text-primary">
                       {sec.code}. {sec.name}
                     </span>
                     <Badge variant="outline" className="text-xs ml-2">
@@ -630,7 +630,7 @@ export function WorkingPaperSection({ ppReviewId, engagementId, clientContext }:
                       <div key={`${sec.code}-${sub.name}`} className="space-y-2">
                         <div className="flex items-center justify-between pl-1">
                           {sub.name ? (
-                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            <div className="text-xs font-semibold text-primary uppercase tracking-wide">
                               {sub.name}
                             </div>
                           ) : <span />}
@@ -769,11 +769,11 @@ function QuestionRow({ q, row, onChange }: QuestionRowProps) {
       )}
     >
       <div className="flex items-start gap-3 p-3">
-        <span className="text-xs font-mono text-muted-foreground w-16 shrink-0 mt-0.5">
+        <span className="text-xs font-mono text-primary font-bold w-16 shrink-0 mt-0.5">
           {q.question_code ?? `Q${q.question_number}`}
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium">{q.question_text}</p>
+          <p className="text-sm font-semibold text-primary">{q.question_text}</p>
           {q.is_new_or_updated && (
             <Badge variant="outline" className="mt-1 text-[10px] uppercase border-amber-500/40 text-amber-700">
               Updated
@@ -788,31 +788,31 @@ function QuestionRow({ q, row, onChange }: QuestionRowProps) {
         <div className="space-y-3 lg:border-r lg:pr-6">
           {q.analyst_guidance && (
             <div>
-              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Analyst testing steps</Label>
+              <Label className="text-xs font-bold text-primary uppercase tracking-wide">Analyst testing steps</Label>
               <p className="text-sm mt-0.5">{q.analyst_guidance}</p>
             </div>
           )}
           {q.pass_criteria && (
             <div>
-              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Policy (Pass criteria)</Label>
+              <Label className="text-xs font-bold text-primary uppercase tracking-wide">Policy (Pass criteria)</Label>
               <p className="text-sm mt-0.5">{q.pass_criteria}</p>
             </div>
           )}
           {q.procedure_statement && (
             <div>
-              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Procedure</Label>
+              <Label className="text-xs font-bold text-primary uppercase tracking-wide">Procedure</Label>
               <p className="text-sm mt-0.5">{q.procedure_statement}</p>
             </div>
           )}
           {q.regulatory_reference && (
             <div>
-              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Reference</Label>
+              <Label className="text-xs font-bold text-primary uppercase tracking-wide">Reference</Label>
               <p className="text-xs mt-0.5">{q.regulatory_reference}</p>
             </div>
           )}
 
           <div>
-            <Label className="text-sm">Response</Label>
+            <Label className="text-sm font-semibold text-primary">Response</Label>
             <RadioGroup
               value={row?.response ?? ''}
               onValueChange={(v) => onChange({ response: v as ResponseValue })}
@@ -831,7 +831,7 @@ function QuestionRow({ q, row, onChange }: QuestionRowProps) {
 
           <div>
             <div className="flex items-center justify-between gap-2">
-              <Label className="text-sm">Deficiency Severity classification</Label>
+              <Label className="text-sm font-semibold text-primary">Deficiency Severity classification</Label>
               {suggestedMeta && (
                 <span
                   className="text-[11px] text-muted-foreground inline-flex items-center gap-1"
@@ -874,7 +874,7 @@ function QuestionRow({ q, row, onChange }: QuestionRowProps) {
         {/* RIGHT — evidence, commentary, findings */}
         <div className="space-y-3">
           <div>
-            <Label className="text-sm">Client doc reference</Label>
+            <Label className="text-sm font-semibold text-primary">Client doc reference</Label>
             <Input
               value={row?.doc_reference ?? ''}
               onChange={(e) => onChange({ doc_reference: e.target.value })}
@@ -893,7 +893,7 @@ function QuestionRow({ q, row, onChange }: QuestionRowProps) {
           </div>
 
           <div>
-            <Label className="text-sm">Notes / commentary</Label>
+            <Label className="text-sm font-semibold text-primary">Notes / commentary</Label>
             <Textarea
               value={row?.notes ?? ''}
               onChange={(e) => onChange({ notes: e.target.value })}
@@ -905,7 +905,7 @@ function QuestionRow({ q, row, onChange }: QuestionRowProps) {
 
           {isFailingResponse && (
             <div>
-              <Label className="text-sm">Reviewer recommendation</Label>
+              <Label className="text-sm font-semibold text-primary">Reviewer recommendation</Label>
               <Textarea
                 value={row?.reviewer_recommendation ?? ''}
                 onChange={(e) => onChange({ reviewer_recommendation: e.target.value })}
@@ -918,7 +918,7 @@ function QuestionRow({ q, row, onChange }: QuestionRowProps) {
 
           {row?.finding_type === 'observation' && (
             <div>
-              <Label className="text-sm">Best-practice observation</Label>
+              <Label className="text-sm font-semibold text-primary">Best-practice observation</Label>
               <Textarea
                 value={row?.observation_best_practice ?? ''}
                 onChange={(e) => onChange({ observation_best_practice: e.target.value })}

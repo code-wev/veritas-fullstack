@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { useToast } from '@/hooks/use-toast';
@@ -51,9 +51,16 @@ const ENTITY_TYPES = [
 interface CreateClientDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  clientToEdit?: {
+    id: string;
+    name: string;
+    entity_type: string;
+    description?: string;
+    msb_activities?: string[];
+  } | null;
 }
 
-export function CreateClientDialog({ open, onOpenChange }: CreateClientDialogProps) {
+export function CreateClientDialog({ open, onOpenChange, clientToEdit }: CreateClientDialogProps) {
   const [name, setName] = useState('');
   const [entityType, setEntityType] = useState('');
   const [msbActivities, setMsbActivities] = useState<string[]>([]);
@@ -61,6 +68,22 @@ export function CreateClientDialog({ open, onOpenChange }: CreateClientDialogPro
   const [loading, setLoading] = useState(false);
   const { user, refreshClients, setSelectedClient } = useApp();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (open) {
+      if (clientToEdit) {
+        setName(clientToEdit.name || '');
+        setEntityType(clientToEdit.entity_type || '');
+        setMsbActivities(clientToEdit.msb_activities || []);
+        setDescription(clientToEdit.description || '');
+      } else {
+        setName('');
+        setEntityType('');
+        setMsbActivities([]);
+        setDescription('');
+      }
+    }
+  }, [open, clientToEdit]);
 
   const showMsbActivities = isMsbEntityType(entityType);
 
@@ -82,55 +105,86 @@ export function CreateClientDialog({ open, onOpenChange }: CreateClientDialogPro
 
     setLoading(true);
 
-    // Create client
-    const { data: clientData, error: clientError } = await supabase
-      .from('clients')
-      .insert({
-        name,
-        entity_type: entityType,
-        description: description || null,
-        created_by: user.id,
-        ...(showMsbActivities ? { msb_activities: msbActivities } as any : {}),
-      } as any)
-      .select()
-      .single();
+    if (clientToEdit) {
+      // Update existing client
+      const { error: clientError } = await supabase
+        .from('clients')
+        .update({
+          name,
+          entity_type: entityType,
+          description: description || null,
+          msb_activities: showMsbActivities ? msbActivities : null,
+        } as any)
+        .eq('id', clientToEdit.id);
 
-    if (clientError) {
+      if (clientError) {
+        toast({
+          title: 'Error updating client',
+          description: clientError.message,
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
       toast({
-        title: 'Error creating client',
-        description: clientError.message,
-        variant: 'destructive',
+        title: 'Client updated',
+        description: `${name} has been updated successfully.`,
       });
+
+      await refreshClients();
+      
       setLoading(false);
-      return;
+      onOpenChange(false);
+    } else {
+      // Create client
+      const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .insert({
+          name,
+          entity_type: entityType,
+          description: description || null,
+          created_by: user.id,
+          ...(showMsbActivities ? { msb_activities: msbActivities } as any : {}),
+        } as any)
+        .select()
+        .single();
+
+      if (clientError) {
+        toast({
+          title: 'Error creating client',
+          description: clientError.message,
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
+      toast({
+        title: 'Client created',
+        description: `${name} has been added successfully.`,
+      });
+
+      await refreshClients();
+      setSelectedClient(clientData);
+      
+      // Reset form
+      setName('');
+      setEntityType('');
+      setMsbActivities([]);
+      setDescription('');
+      setLoading(false);
+      onOpenChange(false);
     }
-
-    // Note: client_assignments is auto-created by database trigger
-
-    toast({
-      title: 'Client created',
-      description: `${name} has been added successfully.`,
-    });
-
-    await refreshClients();
-    setSelectedClient(clientData);
-    
-    // Reset form
-    setName('');
-    setEntityType('');
-    setMsbActivities([]);
-    setDescription('');
-    setLoading(false);
-    onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add New Client</DialogTitle>
+          <DialogTitle>{clientToEdit ? 'Edit Client' : 'Add New Client'}</DialogTitle>
           <DialogDescription>
-            Create a new client to begin AML effectiveness reviews.
+            {clientToEdit ? 'Update client details and MSB activities.' : 'Create a new client to begin AML effectiveness reviews.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
@@ -210,7 +264,7 @@ export function CreateClientDialog({ open, onOpenChange }: CreateClientDialogPro
               Cancel
             </Button>
             <Button type="submit" disabled={loading || !name || !entityType}>
-              {loading ? 'Creating...' : 'Create Client'}
+              {loading ? 'Saving...' : (clientToEdit ? 'Save Changes' : 'Create Client')}
             </Button>
           </DialogFooter>
         </form>

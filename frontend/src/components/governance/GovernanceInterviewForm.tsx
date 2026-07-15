@@ -789,11 +789,11 @@ export function GovernanceInterviewForm({
                 <div className={`border rounded-lg ${hasFlag ? 'border-destructive/50 bg-destructive/5' : ''}`}>
                   <CollapsibleTrigger asChild>
                     <div className="flex items-start gap-3 p-4 cursor-pointer hover:bg-muted/50">
-                      <span className="text-sm font-medium text-muted-foreground w-6">
+                      <span className="text-sm font-bold text-primary w-6">
                         {question.question_number}.
                       </span>
                       <div className="flex-1">
-                        <p className="text-sm font-medium">{question.question_text}</p>
+                        <p className="text-sm font-semibold text-primary">{question.question_text}</p>
                         {question.evidence_required && (
                           <Badge variant="outline" className="mt-1 text-xs">
                             <FileText className="h-3 w-3 mr-1" />
@@ -825,7 +825,7 @@ export function GovernanceInterviewForm({
                   <CollapsibleContent>
                     <div className="px-4 pb-4 pt-0 space-y-4 border-t">
                       <div className="pt-4">
-                        <Label className="text-sm">Response</Label>
+                        <Label className="text-sm font-semibold text-primary">Response</Label>
                         <RadioGroup
                           value={response?.response || ''}
                           onValueChange={(value) => updateLocalResponse(question.question_number, 'response', value)}
@@ -843,7 +843,7 @@ export function GovernanceInterviewForm({
                       </div>
 
                       <div>
-                        <Label className="text-sm">Response Details / Notes</Label>
+                        <Label className="text-sm font-semibold text-primary">Response Details / Notes</Label>
                         <Textarea
                           value={response?.response_details || ''}
                           onChange={(e) => updateLocalResponse(question.question_number, 'response_details', e.target.value)}
@@ -855,7 +855,7 @@ export function GovernanceInterviewForm({
 
                       {hasFlag && (
                         <div>
-                          <Label className="text-sm text-destructive">Analyst Commentary (Required for Flags)</Label>
+                          <Label className="text-sm font-semibold text-destructive">Analyst Commentary (Required for Flags)</Label>
                           <Textarea
                             value={response?.analyst_commentary || ''}
                             onChange={(e) => updateLocalResponse(question.question_number, 'analyst_commentary', e.target.value)}

@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useApp } from '@/contexts/AppContext';
-import { createClient } from '@supabase/supabase-js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +11,16 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Shield, Users, Building2, UserPlus, Trash2, Edit, Plus, Eye, EyeOff } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -34,77 +43,13 @@ interface ClientAssignment {
   assigned_at: string;
 }
 
-interface ModuleAssignmentRowProps {
-  moduleKey: string;
-  label: string;
-  userId: string;
-  engagementId: string;
-  isChecked: boolean;
-  onSuccess: () => void;
-}
 
-function ModuleAssignmentRow({ moduleKey, label, userId, engagementId, isChecked, onSuccess }: ModuleAssignmentRowProps) {
-  const { toast } = useToast();
-  
-  const toggleMutation = useMutation({
-    mutationFn: async ({ checked }: { checked: boolean }) => {
-      if (checked) {
-        const { error } = await supabase
-          .from('engagement_module_assignments')
-          .insert({
-            user_id: userId,
-            engagement_id: engagementId,
-            module: moduleKey,
-          });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('engagement_module_assignments')
-          .delete()
-          .eq('user_id', userId)
-          .eq('engagement_id', engagementId)
-          .eq('module', moduleKey);
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      onSuccess();
-      toast({ title: `${label} assignment updated` });
-    },
-    onError: (err: any) => {
-      toast({
-        title: 'Failed to update assignment',
-        description: err.message,
-        variant: 'destructive',
-      });
-    },
-  });
-
-  return (
-    <div className="flex items-center space-x-2 p-2 hover:bg-muted/50 rounded-md transition-colors">
-      <Checkbox
-        id={`mod-${moduleKey}`}
-        checked={isChecked}
-        onCheckedChange={(checked) => {
-          toggleMutation.mutate({ checked: !!checked });
-        }}
-        disabled={toggleMutation.isPending}
-      />
-      <Label 
-        htmlFor={`mod-${moduleKey}`} 
-        className="text-sm font-medium leading-none cursor-pointer flex-1 py-1"
-      >
-        {label}
-      </Label>
-    </div>
-  );
-}
 
 export default function SecurityAccess() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { role, isAdmin } = useUserRole();
-  const { selectedClient, user } = useApp();
+  const { selectedClient, user, refreshClients, refreshEngagements } = useApp();
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState<AppRole>('analyst');
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
@@ -115,6 +60,9 @@ export default function SecurityAccess() {
   const [selectedAssignmentEngagementId, setSelectedAssignmentEngagementId] = useState<string | null>(null);
   const [showClientDialog, setShowClientDialog] = useState(false);
   const [showEngagementDialog, setShowEngagementDialog] = useState(false);
+  const [clientToEdit, setClientToEdit] = useState<any>(null);
+  const [engagementToEdit, setEngagementToEdit] = useState<any>(null);
+  const [tempSelectedModules, setTempSelectedModules] = useState<string[]>([]);
   const [isCreateClientAccountOpen, setIsCreateClientAccountOpen] = useState(false);
   const [newClientEmail, setNewClientEmail] = useState('');
   const [newClientPassword, setNewClientPassword] = useState('');
@@ -123,99 +71,62 @@ export default function SecurityAccess() {
 
   const createClientAccountMutation = useMutation({
     mutationFn: async ({ email, password, fullName }: { email: string; password: string; fullName: string }) => {
-      if (!import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY) {
-        throw new Error("Supabase Service Role Key is not configured in .env file (VITE_SUPABASE_SERVICE_ROLE_KEY). Please add it to your local environment to enable admin user creation.");
-      }
-
-      // 1. Initialize admin client
-      const adminClient = createClient(
-        import.meta.env.VITE_SUPABASE_URL,
-        import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY,
-        {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-          }
-        }
-      );
-
-      // 2. Create user in auth.users
-      const { data: userData, error: createError } = await adminClient.auth.admin.createUser({
-        email: email.trim().toLowerCase(),
-        password: password,
-        email_confirm: true, // Auto-confirm email so they can log in immediately
-        user_metadata: {
-          full_name: fullName.trim(),
-          needs_password_change: true,
-        }
+      // 1. Create user via Database RPC (securely inside the database)
+      const { data, error: createError } = await supabase.rpc('admin_create_user', {
+        _email: email.trim().toLowerCase(),
+        _password: password,
+        _full_name: fullName.trim(),
       });
-
-      if (createError) throw createError;
-      if (!userData.user) throw new Error("Failed to create user account.");
-
-      const newUserId = userData.user.id;
-
-      // 3. Assign role 'client_user'
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert({ user_id: newUserId, role: 'client_user' });
-
-      if (roleError) {
-        // Cleanup user if role assignment fails
-        await adminClient.auth.admin.deleteUser(newUserId);
-        throw roleError;
+      
+      if (createError) {
+        throw new Error(createError.message || "Failed to create user account.");
+      }
+      if (data?.success === false) {
+        throw new Error(data.error || "Failed to create user account.");
       }
 
-      // 4. Send actual credentials email via database RPC to bypass CORS
+      // 2. Send credentials email via secure Database RPC
       let emailSent = false;
       let emailErrorMsg = '';
 
-      const resendApiKey = import.meta.env.VITE_RESEND_API_KEY;
-
-      if (!resendApiKey) {
-        emailErrorMsg = "VITE_RESEND_API_KEY is not configured in your .env file.";
-      } else {
-        try {
-          const emailHtml = `
-            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-              <h2 style="color: #1E3A8A; margin-bottom: 4px;">Veritas Compliance Platform</h2>
-              <p style="color: #64748B; font-size: 14px; margin-top: 0; margin-bottom: 24px;">Secure AML Auditing & Review</p>
-              
-              <p>Hello <strong>${fullName.trim()}</strong>,</p>
-              <p>An administrator has created a client user account for you. You can log in using the temporary credentials below:</p>
-              
-              <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 16px; border-radius: 6px; margin: 20px 0;">
-                <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Login Email:</strong> <span style="font-family: monospace;">${email.trim().toLowerCase()}</span></p>
-                <p style="margin: 0; font-size: 14px;"><strong>Temporary Password:</strong> <span style="font-family: monospace;">${password}</span></p>
-              </div>
-              
-              <p><strong>Next Steps:</strong></p>
-              <p>For your security, you will be prompted to change this temporary password and complete your profile setup (including uploading an optional profile picture) upon your first login.</p>
-              
-              <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 24px 0;" />
-              <p style="color: #94A3B8; font-size: 12px; line-height: 1.5; margin: 0;">
-                This is an automated onboarding notification. Please contact your Veritas compliance administrator if you did not request this account.
-              </p>
+      try {
+        const emailHtml = `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+            <h2 style="color: #1E3A8A; margin-bottom: 4px;">Veritas Compliance Platform</h2>
+            <p style="color: #64748B; font-size: 14px; margin-top: 0; margin-bottom: 24px;">Secure AML Auditing & Review</p>
+            
+            <p>Hello <strong>${fullName.trim()}</strong>,</p>
+            <p>An administrator has created a client user account for you. You can log in using the temporary credentials below:</p>
+            
+            <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 16px; border-radius: 6px; margin: 20px 0;">
+              <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Login Email:</strong> <span style="font-family: monospace;">${email.trim().toLowerCase()}</span></p>
+              <p style="margin: 0; font-size: 14px;"><strong>Temporary Password:</strong> <span style="font-family: monospace;">${password}</span></p>
             </div>
-          `;
+            
+            <p><strong>Next Steps:</strong></p>
+            <p>For your security, you will be prompted to change this temporary password and complete your profile setup (including uploading an optional profile picture) upon your first login.</p>
+            
+            <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 24px 0;" />
+            <p style="color: #94A3B8; font-size: 12px; line-height: 1.5; margin: 0;">
+              This is an automated onboarding notification. Please contact your Veritas compliance administrator if you did not request this account.
+            </p>
+          </div>
+        `;
 
-          const { data: rpcData, error: rpcError } = await supabase.rpc('send_resend_email', {
-            to_email: email.trim().toLowerCase(),
-            subject: "Welcome to Veritas AML Platform - Your Credentials",
-            html_content: emailHtml,
-            resend_api_key: resendApiKey
-          });
+        const { data: emailData, error: emailError } = await supabase.rpc('send_resend_email_secure', {
+          to_email: email.trim().toLowerCase(),
+          subject: "Welcome to Veritas AML Platform - Your Credentials",
+          html_content: emailHtml,
+        });
 
-          if (rpcError) throw rpcError;
-          if (rpcData?.success === false) {
-            throw new Error(rpcData.error || "Email delivery failed.");
-          }
-
-          emailSent = true;
-        } catch (err: any) {
-          console.error("Failed to send onboarding email:", err);
-          emailErrorMsg = err.message || "Failed to call send_resend_email RPC.";
+        if (emailError) throw emailError;
+        if (emailData?.success === false) {
+          throw new Error(emailData.error || "Email delivery failed.");
         }
+        emailSent = true;
+      } catch (err: any) {
+        console.error("Failed to send onboarding email:", err);
+        emailErrorMsg = err.message || "Failed to call send_resend_email_secure RPC.";
       }
       
       return { email, password, emailSent, emailErrorMsg };
@@ -255,6 +166,7 @@ export default function SecurityAccess() {
     setShowClientDialog(open);
     if (!open) {
       queryClient.invalidateQueries({ queryKey: ['all-clients'] });
+      setClientToEdit(null);
     }
   };
 
@@ -262,8 +174,59 @@ export default function SecurityAccess() {
     setShowEngagementDialog(open);
     if (!open) {
       queryClient.invalidateQueries({ queryKey: ['admin-engagements-with-clients'] });
+      setEngagementToEdit(null);
     }
   };
+
+  // Delete client mutation
+  const deleteClientMutation = useMutation({
+    mutationFn: async (clientId: string) => {
+      const { error } = await supabase
+        .from('clients')
+        .delete()
+        .eq('id', clientId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['all-clients'] });
+      queryClient.invalidateQueries({ queryKey: ['client-assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-engagements-with-clients'] });
+      refreshClients();
+      toast({ title: 'Client deleted successfully' });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to delete client',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  });
+
+  // Delete engagement mutation
+  const deleteEngagementMutation = useMutation({
+    mutationFn: async (engagementId: string) => {
+      const { error } = await supabase
+        .from('engagements')
+        .delete()
+        .eq('id', engagementId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-engagements-with-clients'] });
+      refreshEngagements();
+      toast({ title: 'Engagement deleted successfully' });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to delete engagement',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  });
+
+  const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string; type: 'client' | 'engagement' } | null>(null);
 
   // Fetch profiles for email lookup
   const { data: profiles = [] } = useQuery({
@@ -396,6 +359,56 @@ export default function SecurityAccess() {
     enabled: !!selectedAssignmentUserId && !!selectedAssignmentEngagementId && isAdmin,
   });
 
+  useEffect(() => {
+    if (userModuleAssignments) {
+      setTempSelectedModules(userModuleAssignments);
+    } else {
+      setTempSelectedModules([]);
+    }
+  }, [userModuleAssignments, selectedAssignmentUserId, selectedAssignmentEngagementId]);
+
+  // Save module scoping assignments mutation
+  const saveModuleScopingMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedAssignmentUserId || !selectedAssignmentEngagementId) return;
+
+      // 1. Delete all existing module assignments for this user and engagement
+      const { error: deleteError } = await supabase
+        .from('engagement_module_assignments')
+        .delete()
+        .eq('user_id', selectedAssignmentUserId)
+        .eq('engagement_id', selectedAssignmentEngagementId);
+      
+      if (deleteError) throw deleteError;
+
+      // 2. Insert new selections
+      if (tempSelectedModules.length > 0) {
+        const insertData = tempSelectedModules.map((moduleKey) => ({
+          user_id: selectedAssignmentUserId,
+          engagement_id: selectedAssignmentEngagementId,
+          module: moduleKey,
+        }));
+
+        const { error: insertError } = await supabase
+          .from('engagement_module_assignments')
+          .insert(insertData);
+
+        if (insertError) throw insertError;
+      }
+    },
+    onSuccess: () => {
+      refetchModuleAssignments();
+      toast({ title: 'Module scoping assignments saved successfully' });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to save module assignments',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  });
+
   // Toggle engagement assignment mutation
   const toggleEngagementAssignmentMutation = useMutation({
     mutationFn: async () => {
@@ -487,33 +500,15 @@ export default function SecurityAccess() {
   // Delete user account mutation (removes user from Auth, roles, profiles, and assignments)
   const deleteUserRoleMutation = useMutation({
     mutationFn: async (userId: string) => {
-      // 1. Delete assignments & roles first to avoid foreign key constraint issues
-      await supabase.from('client_assignments').delete().eq('user_id', userId);
-      await supabase.from('engagement_assignments').delete().eq('user_id', userId);
-      await supabase.from('engagement_module_assignments').delete().eq('user_id', userId);
-      await supabase.from('user_roles').delete().eq('user_id', userId);
-
-      // 2. Delete from auth.users using admin client
-      if (!import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY) {
-        throw new Error("Supabase Service Role Key is not configured in .env file (VITE_SUPABASE_SERVICE_ROLE_KEY). Please add it to your local environment to enable admin user deletion.");
+      const { data, error } = await supabase.rpc('admin_delete_user', {
+        _user_id: userId,
+      });
+      if (error) {
+        throw new Error(error.message || "Failed to delete user account.");
       }
-
-      const adminClient = createClient(
-        import.meta.env.VITE_SUPABASE_URL,
-        import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY,
-        {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-          }
-        }
-      );
-
-      const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(userId);
-      if (deleteAuthError) throw deleteAuthError;
-
-      // 3. Delete profile last (if database trigger/cascade didn't do it)
-      await supabase.from('profiles').delete().eq('id', userId);
+      if (data?.success === false) {
+        throw new Error(data?.error || "Failed to delete user account.");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
@@ -618,7 +613,10 @@ export default function SecurityAccess() {
               <CardTitle className="text-lg font-bold">Clients</CardTitle>
               <CardDescription>All registered clients</CardDescription>
             </div>
-            <Button onClick={() => setShowClientDialog(true)} size="sm">
+            <Button onClick={() => {
+              setClientToEdit(null);
+              setShowClientDialog(true);
+            }} size="sm">
               <Plus className="w-4 h-4 mr-1" />
               Add Client
             </Button>
@@ -631,13 +629,36 @@ export default function SecurityAccess() {
             ) : (
               <div className="space-y-3">
                 {clients.map((client) => (
-                  <div key={client.id} className="p-3 border rounded-lg bg-card hover:bg-accent/20 transition-colors">
-                    <div className="font-semibold text-sm">{client.name}</div>
-                    {client.entity_type && (
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {client.entity_type}
-                      </div>
-                    )}
+                  <div key={client.id} className="p-3 border rounded-lg bg-card hover:bg-accent/20 transition-colors flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold text-sm">{client.name}</div>
+                      {client.entity_type && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {client.entity_type}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="w-8 h-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          setClientToEdit(client);
+                          setShowClientDialog(true);
+                        }}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="w-8 h-8 text-destructive hover:text-destructive/80"
+                        onClick={() => setItemToDelete({ id: client.id, name: client.name, type: 'client' })}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -661,7 +682,10 @@ export default function SecurityAccess() {
                 </span>
               )}
               <Button 
-                onClick={() => setShowEngagementDialog(true)} 
+                onClick={() => {
+                  setEngagementToEdit(null);
+                  setShowEngagementDialog(true);
+                }} 
                 size="sm"
                 disabled={!selectedClient}
                 title={!selectedClient ? "Select a client from the switcher first" : ""}
@@ -680,17 +704,38 @@ export default function SecurityAccess() {
               <div className="space-y-3">
                 {engagements.map((eng) => (
                   <div key={eng.id} className="p-3 border rounded-lg bg-card hover:bg-accent/20 transition-colors flex items-center justify-between">
-                    <div>
-                      <div className="font-semibold text-sm">{eng.name}</div>
-                      <div className="text-xs text-muted-foreground mt-1">
+                    <div className="min-w-0 flex-1 mr-2">
+                      <div className="font-semibold text-sm truncate">{eng.name}</div>
+                      <div className="text-xs text-muted-foreground mt-1 truncate">
                         Client: {eng.client_name}
                       </div>
                     </div>
-                    {eng.status && (
-                      <Badge variant={eng.status === 'completed' ? 'default' : 'outline'} className="capitalize text-xs">
-                        {eng.status.replace('_', ' ')}
-                      </Badge>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {eng.status && (
+                        <Badge variant={eng.status === 'completed' ? 'default' : 'outline'} className="capitalize text-xs">
+                          {eng.status.replace('_', ' ')}
+                        </Badge>
+                      )}
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="w-8 h-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          setEngagementToEdit(eng);
+                          setShowEngagementDialog(true);
+                        }}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="w-8 h-8 text-destructive hover:text-destructive/80"
+                        onClick={() => setItemToDelete({ id: eng.id, name: eng.name, type: 'engagement' })}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1114,19 +1159,34 @@ export default function SecurityAccess() {
                       { key: 'reporting', label: 'Transaction Reporting' },
                       { key: 'monitoring', label: 'Transaction Monitoring' },
                     ].map((mod) => {
-                      const isChecked = Array.isArray(userModuleAssignments) && userModuleAssignments.includes(mod.key);
+                      const isChecked = tempSelectedModules.includes(mod.key);
                       return (
-                        <ModuleAssignmentRow
-                          key={mod.key}
-                          moduleKey={mod.key}
-                          label={mod.label}
-                          userId={selectedAssignmentUserId}
-                          engagementId={selectedAssignmentEngagementId}
-                          isChecked={isChecked}
-                          onSuccess={refetchModuleAssignments}
-                        />
+                        <div key={mod.key} className="flex items-center space-x-2 p-2 hover:bg-muted/50 rounded-md transition-colors">
+                          <Checkbox
+                            id={`mod-${mod.key}`}
+                            checked={isChecked}
+                            onCheckedChange={(checked) => {
+                              setTempSelectedModules(prev => 
+                                checked 
+                                  ? [...prev, mod.key] 
+                                  : prev.filter(m => m !== mod.key)
+                              );
+                            }}
+                          />
+                          <Label htmlFor={`mod-${mod.key}`} className="text-sm font-medium cursor-pointer flex-1">
+                            {mod.label}
+                          </Label>
+                        </div>
                       );
                     })}
+                  </div>
+                  <div className="flex justify-end pt-4 border-t mt-4">
+                    <Button 
+                      onClick={() => saveModuleScopingMutation.mutate()} 
+                      disabled={saveModuleScopingMutation.isPending}
+                    >
+                      {saveModuleScopingMutation.isPending ? "Saving..." : "Save Scoping Assignments"}
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -1143,8 +1203,51 @@ export default function SecurityAccess() {
         </CardContent>
       </Card>
 
-      <CreateClientDialog open={showClientDialog} onOpenChange={handleClientOpenChange} />
-      <CreateEngagementDialog open={showEngagementDialog} onOpenChange={handleEngagementOpenChange} />
+      <CreateClientDialog open={showClientDialog} onOpenChange={handleClientOpenChange} clientToEdit={clientToEdit} />
+      <CreateEngagementDialog open={showEngagementDialog} onOpenChange={handleEngagementOpenChange} engagementToEdit={engagementToEdit} />
+
+      <AlertDialog open={itemToDelete !== null} onOpenChange={(open) => !open && setItemToDelete(null)}>
+        {itemToDelete && (
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-destructive flex items-center gap-2">
+                Confirm Delete
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-foreground mt-2">
+                {itemToDelete.type === 'client' ? (
+                  <span>
+                    Are you sure you want to delete client <strong>{itemToDelete.name}</strong>? 
+                    This action is permanent and will cascade delete all associated data, including engagements, reviews, and documents.
+                  </span>
+                ) : (
+                  <span>
+                    Are you sure you want to delete engagement <strong>{itemToDelete.name}</strong>? 
+                    This action is permanent and will cascade delete all associated reviews, audits, and findings.
+                  </span>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={() => {
+                  if (itemToDelete) {
+                    if (itemToDelete.type === 'client') {
+                      deleteClientMutation.mutate(itemToDelete.id);
+                    } else {
+                      deleteEngagementMutation.mutate(itemToDelete.id);
+                    }
+                    setItemToDelete(null);
+                  }
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        )}
+      </AlertDialog>
     </div>
   );
 }
