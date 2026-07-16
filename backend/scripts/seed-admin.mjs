@@ -161,6 +161,21 @@ async function main() {
 
   if (roleError) throw roleError;
 
+  // Seed Resend API Key if present in environment variables
+  const resendApiKey = process.env.RESEND_API_KEY;
+  if (resendApiKey) {
+    console.log('Seeding Resend API Key to public.system_settings...');
+    const { error: resendError } = await supabase
+      .from('system_settings')
+      .upsert({ key: 'resend_api_key', value: resendApiKey }, { onConflict: 'key' });
+    
+    if (resendError) {
+      console.warn('Failed to seed Resend API Key:', resendError.message);
+    } else {
+      console.log('Resend API Key seeded successfully.');
+    }
+  }
+
   console.log('Admin seed complete.');
   console.log(`Email: ${ADMIN_EMAIL}`);
   console.log(`Password: ${ADMIN_PASSWORD}`);

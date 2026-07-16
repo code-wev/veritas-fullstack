@@ -11,10 +11,11 @@ ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
 -- This ensures that no clients, anonymous users, or authenticated roles can read/write to it.
 -- Only SECURITY DEFINER functions (which run as the database owner) can query it.
 
--- Insert the Resend API key
+-- Create a placeholder for the Resend API key if it does not exist.
+-- The actual API key is seeded from the environment variable via backend setup scripts or manual entry.
 INSERT INTO public.system_settings (key, value)
-VALUES ('resend_api_key', 're_6wDZypTd_QErmjLcAQdCDS5wx1LRcdNVD')
-ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+VALUES ('resend_api_key', '')
+ON CONFLICT (key) DO NOTHING;
 
 -- Create database helper function to send emails securely without exposing API key
 CREATE OR REPLACE FUNCTION public.send_resend_email_secure(
