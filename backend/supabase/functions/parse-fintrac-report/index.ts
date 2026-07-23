@@ -268,25 +268,44 @@ serve(async (req) => {
   try {
     const { fileData, fileName, fileType } = await req.json();
     if (!fileData) throw new Error("No file data provided");
+    let apiKey = Deno.env.get("LOVABLE_API_KEY");
+    let apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+    let apiModel = fileType === 'application/pdf' ? 'google/gemini-2.5-pro' : 'google/gemini-2.5-flash';
 
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
+    if (!apiKey) {
+      const geminiKey = Deno.env.get("GEMINI_API_KEY");
+      if (geminiKey) {
+        apiKey = geminiKey;
+        apiUrl = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+        apiModel = "gemini-3.5-flash";
+      }
+    }
+
+    if (!apiKey) {
+      const openaiKey = Deno.env.get("OPENAI_API_KEY");
+      if (openaiKey) {
+        apiKey = openaiKey;
+        apiUrl = "https://api.openai.com/v1/chat/completions";
+        apiModel = "gpt-4o";
+      }
+    }
+
+    if (!apiKey) {
+      throw new Error("No AI API Key configured. Please set LOVABLE_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY in your Supabase project secrets.");
+    }
 
     const messages = buildAIMessages(fileData, fileName, fileType);
 
-    // Use a stronger model for PDF extraction to ensure thorough reading
-    const model = fileType === 'application/pdf' ? 'google/gemini-2.5-pro' : 'google/gemini-2.5-flash';
+    console.log(`Parsing ${fileName} (${fileType}) via ${apiUrl} using model ${apiModel}`);
 
-    console.log(`Parsing ${fileName} (${fileType}) with model ${model}`);
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model,
+        model: apiModel,
         messages,
         max_tokens: 16384,
         temperature: 0.1,
@@ -295,8 +314,8 @@ serve(async (req) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI Gateway error:", errorText);
-      throw new Error(`AI Gateway error: ${response.status}`);
+      console.error("API error:", errorText);
+      throw new Error(`API error (${response.status}): ${errorText}`);
     }
 
     const aiResponse = await response.json();

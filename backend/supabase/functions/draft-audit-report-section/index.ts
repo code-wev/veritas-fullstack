@@ -161,7 +161,24 @@ serve(async (req) => {
   const startTime = Date.now();
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+  let apiKey = Deno.env.get("LOVABLE_API_KEY");
+  let apiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+
+  if (!apiKey) {
+    const geminiKey = Deno.env.get("GEMINI_API_KEY");
+    if (geminiKey) {
+      apiKey = geminiKey;
+      apiUrl = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+    }
+  }
+
+  if (!apiKey) {
+    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    if (openaiKey) {
+      apiKey = openaiKey;
+      apiUrl = "https://api.openai.com/v1/chat/completions";
+    }
+  }
 
   // Service-role client — this function does the auth check itself via the
   // caller's bearer token, then uses service_role for DB writes (bypassing
@@ -173,7 +190,7 @@ serve(async (req) => {
   let body: any = null;
 
   try {
-    if (!lovableKey) throw new Error("LOVABLE_API_KEY not configured");
+    if (!apiKey) throw new Error("No AI API Key configured. Please set LOVABLE_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY in your Supabase project secrets.");
 
     // 1. Authenticate the caller
     const authHeader = req.headers.get("Authorization");
@@ -257,12 +274,20 @@ serve(async (req) => {
     };
     const userPrompt = template.buildUserPrompt(ctx);
 
-    // 7. Call Lovable AI gateway
-    const model = requestedModel || DEFAULT_MODEL;
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // 7. Call Lovable AI gateway / API provider
+    let model = requestedModel || DEFAULT_MODEL;
+    if (apiUrl.includes("generativelanguage.googleapis.com")) {
+      model = "gemini-3.5-flash";
+    } else if (apiUrl.includes("api.openai.com")) {
+      model = "gpt-4o";
+    }
+
+    console.log(`Drafting section ${section_key} via ${apiUrl} using model ${model}`);
+
+    const aiResponse = await fetch(apiUrl, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${lovableKey}`,
+        "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
