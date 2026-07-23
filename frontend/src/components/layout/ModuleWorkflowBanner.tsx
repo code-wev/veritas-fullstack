@@ -67,9 +67,23 @@ const STATE_DETAILS: Record<LockState, { label: string; description: string; col
   },
 };
 
+const getFriendlyModuleName = (key: string): string => {
+  const mapping: Record<string, string> = {
+    msb_registration: 'MSB Registration',
+    governance: 'Governance',
+    aml_program: 'AML Program',
+    risk_assessment: 'Risk Assessment',
+    training: 'Training',
+    kyc: 'KYC Review',
+    reporting: 'Transaction Reporting',
+    transaction_monitoring: 'Transaction Monitoring',
+  };
+  return mapping[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+};
+
 const getActionType = (from: LockState, to: LockState): string => {
   if (to === 'manager_review') return 'submit';
-  if (to === 'partner_review') return 'approve';
+  if (to === 'partner_review') return from === 'draft' ? 'submit' : 'approve';
   if (from === 'manager_review' && to === 'draft') return 'reject';
   if (from === 'partner_review' && to === 'manager_review') return 'reject';
   if (from === 'partner_review' && to === 'draft') return 'reject';
@@ -251,6 +265,7 @@ export function ModuleWorkflowBanner({
       await recordHistory(lockState, nextState, actionType, notes);
 
       // 2. Perform DB update
+      let result;
       if (!record?.id) {
         const { data, error } = await supabase
           .from(tableName as any)
@@ -261,7 +276,7 @@ export function ModuleWorkflowBanner({
           .select()
           .single();
         if (error) throw error;
-        return data;
+        result = data;
       } else {
         const { data, error } = await supabase
           .from(tableName as any)
@@ -273,8 +288,127 @@ export function ModuleWorkflowBanner({
           .select()
           .single();
         if (error) throw error;
-        return data;
+        result = data;
       }
+
+      // 3. Send email notification if transitioning to partner_review directly from draft by an analyst
+      if (nextState === 'partner_review' && role === 'analyst') {
+        try {
+          // Fetch engagement details
+          const { data: engData } = await supabase
+            .from('engagements')
+            .select('name, client_id, clients(name)')
+            .eq('id', engagementId)
+            .single();
+
+          const engagementName = engData?.name || 'Engagement';
+          const clientName = (engData as unknown as { clients: { name: string } | null })?.clients?.name || 'Client';
+
+          // A. Fetch partners assigned to this engagement
+          const { data: assignments, error: assError } = await supabase
+            .from('engagement_assignments')
+            .select('user_id')
+            .eq('engagement_id', engagementId);
+
+          let partnerEmails: string[] = [];
+
+          if (!assError && assignments && assignments.length > 0) {
+            const userIds = assignments.map(a => a.user_id);
+            const { data: partners } = await supabase
+              .from('user_roles')
+              .select('user_id')
+              .in('user_id', userIds)
+              .eq('role', 'partner');
+            
+            if (partners && partners.length > 0) {
+              const partnerIds = partners.map(p => p.user_id);
+              const { data: partnerProfiles } = await supabase
+                .from('profiles')
+                .select('email')
+                .in('id', partnerIds);
+              
+              if (partnerProfiles) {
+                partnerEmails = partnerProfiles.map(p => p.email).filter(Boolean);
+              }
+            }
+          }
+
+          // B. If no partners are assigned, fallback to all partners
+          if (partnerEmails.length === 0) {
+            const { data: allPartners } = await supabase
+              .from('user_roles')
+              .select('user_id')
+              .eq('role', 'partner');
+            
+            if (allPartners && allPartners.length > 0) {
+              const partnerIds = allPartners.map(p => p.user_id);
+              const { data: partnerProfiles } = await supabase
+                .from('profiles')
+                .select('email')
+                .in('id', partnerIds);
+              
+              if (partnerProfiles) {
+                partnerEmails = partnerProfiles.map(p => p.email).filter(Boolean);
+              }
+            }
+          }
+
+          // C. Send email to each partner
+          const analystName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'An analyst';
+          const moduleName = getFriendlyModuleName(moduleKey);
+
+          for (const email of partnerEmails) {
+            const emailSubject = `[Veritas Review Action] Module Ready for Partner Review: ${moduleName}`;
+            const emailHtml = `
+              <div style="font-family: sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 8px;">
+                <h2 style="color: #ea580c; border-bottom: 2px solid #f97316; padding-bottom: 10px; margin-top: 0;">Partner Review Requested</h2>
+                <p>Hello,</p>
+                <p>An analyst has directly submitted a module for your senior sign-off:</p>
+                <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                  <tr>
+                    <td style="padding: 8px 0; font-weight: bold; width: 120px;">Client:</td>
+                    <td style="padding: 8px 0;">${clientName}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; font-weight: bold;">Engagement:</td>
+                    <td style="padding: 8px 0;">${engagementName}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; font-weight: bold;">Module:</td>
+                    <td style="padding: 8px 0; color: #1e3a8a; font-weight: bold;">${moduleName}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; font-weight: bold;">Submitted By:</td>
+                    <td style="padding: 8px 0;">${analystName} (${user?.email})</td>
+                  </tr>
+                  ${notes ? `
+                  <tr>
+                    <td style="padding: 8px 0; font-weight: bold; vertical-align: top;">Notes:</td>
+                    <td style="padding: 8px 0; background-color: #f9fafb; padding: 8px; border-radius: 4px; font-style: italic;">"${notes}"</td>
+                  </tr>
+                  ` : ''}
+                </table>
+                <p style="margin-top: 25px;">Please log in to the Veritas AML Platform to review the module and finalize/lock it.</p>
+                <div style="text-align: center; margin-top: 30px;">
+                  <a href="${window.location.origin}" style="background-color: #ea580c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Go to Dashboard</a>
+                </div>
+                <hr style="border: 0; border-top: 1px solid #eee; margin-top: 30px;" />
+                <p style="font-size: 11px; color: #666; text-align: center;">This is an automated notification from Veritas AML Platform.</p>
+              </div>
+            `;
+
+            await supabase.rpc('send_resend_email_secure', {
+              to_email: email,
+              subject: emailSubject,
+              html_content: emailHtml
+            });
+          }
+        } catch (err) {
+          console.error("Failed to send partner notifications:", err);
+        }
+      }
+
+      return result;
     },
     onSuccess: (data) => {
       refetch();
@@ -476,15 +610,26 @@ export function ModuleWorkflowBanner({
 
             {/* Analyst Options */}
             {role === 'analyst' && lockState === 'draft' && (
-              <Button 
-                size="sm"
-                variant="outline" 
-                onClick={() => setPendingTransition({ nextState: 'manager_review', actionLabel: 'Submit for Manager Review' })}
-                disabled={transitionMutation.isPending}
-                className="h-9"
-              >
-                Submit for Manager Review <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button 
+                  size="sm"
+                  variant="outline" 
+                  onClick={() => setPendingTransition({ nextState: 'manager_review', actionLabel: 'Submit for Manager Review' })}
+                  disabled={transitionMutation.isPending}
+                  className="h-9"
+                >
+                  Submit for Manager Review <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                </Button>
+                <Button 
+                  size="sm"
+                  variant="default" 
+                  onClick={() => setPendingTransition({ nextState: 'partner_review', actionLabel: 'Submit directly to Partner Review' })}
+                  disabled={transitionMutation.isPending}
+                  className="h-9 bg-orange-600 hover:bg-orange-700 text-white border-0"
+                >
+                  Submit directly to Partner <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                </Button>
+              </div>
             )}
 
             {/* Manager Options */}
