@@ -450,7 +450,19 @@ export function ReportUploadDialog({ open, onOpenChange, engagementId, reviewId,
     const { data, error } = await supabase.functions.invoke('parse-fintrac-report', {
       body: { fileData: base64, fileName: file.name, fileType: file.type },
     });
-    if (error) throw new Error(error.message || 'Failed to parse PDF');
+    if (error) {
+      let details = '';
+      try {
+        if (error.context) {
+          const bodyText = await error.context.text();
+          const parsed = JSON.parse(bodyText);
+          details = parsed.error || bodyText;
+        }
+      } catch (e) {
+        console.error('Failed to parse error context:', e);
+      }
+      throw new Error(details || error.message || 'Failed to parse PDF');
+    }
     return data.reports || [];
   };
 
@@ -480,6 +492,10 @@ export function ReportUploadDialog({ open, onOpenChange, engagementId, reviewId,
     const allReports: ParsedReport[] = [];
     for (let i = 0; i < files.length; i++) {
       if (files[i].status === 'idle') {
+        if (allReports.length > 0) {
+          // Pause 1.5s between files to respect API rate limits
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
         const reports = await processFile(i);
         allReports.push(...reports);
       }
